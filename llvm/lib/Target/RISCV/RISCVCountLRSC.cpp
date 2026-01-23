@@ -103,62 +103,63 @@ private:
       functionCounts.clear();
     }
     llvm::json::Value toJSON() const {
-  llvm::json::Object Root;
-  llvm::json::Object FuncMap; // function-name -> { totals, basic_blocks }
+      llvm::json::Object Root;
+      llvm::json::Object FuncMap; // function-name -> { totals, basic_blocks }
 
-  for (const auto &FO : basicBlockOrder) {
-    const MachineFunction *MF = FO.first;
-    const auto &Order = FO.second;
+      for (const auto &FO : basicBlockOrder) {
+        const MachineFunction *MF = FO.first;
+        const auto &Order = FO.second;
 
-    std::string Name = MF ? MF->getName().str() : "<null>";
+        std::string Name = MF ? MF->getName().str() : "<null>";
 
-    int FuncTotal = 0;
-    if (auto ItFT = functionCounts.find(MF); ItFT != functionCounts.end())
-      FuncTotal = ItFT->second;
+        int FuncTotal = 0;
+        if (auto ItFT = functionCounts.find(MF); ItFT != functionCounts.end())
+          FuncTotal = ItFT->second;
 
-    llvm::json::Array Blocks;
+        llvm::json::Array Blocks;
 
-    auto ItBBTotals = basicBlocksCounts.find(MF);
-    auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
+        auto ItBBTotals = basicBlocksCounts.find(MF);
+        auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
 
-    for (size_t i = 0; i < Order.size(); ++i) {
-      const MachineBasicBlock *MBB = Order[i];
+        for (size_t i = 0; i < Order.size(); ++i) {
+          const MachineBasicBlock *MBB = Order[i];
 
-      llvm::json::Object BBObj;
-      BBObj["bb_index"] = static_cast<int64_t>(i);
-      BBObj["mbb_number"] = MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
+          llvm::json::Object BBObj;
+          BBObj["bb_index"] = static_cast<int64_t>(i);
+          BBObj["mbb_number"] =
+              MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
 
-      int BBTotal = 0;
-      if (ItBBTotals != basicBlocksCounts.end() && MBB) {
-        auto It = ItBBTotals->second.find(MBB);
-        if (It != ItBBTotals->second.end())
-          BBTotal = It->second;
-      }
-      BBObj["bb_total_lrsc_occurrences"] = BBTotal;
+          int BBTotal = 0;
+          if (ItBBTotals != basicBlocksCounts.end() && MBB) {
+            auto It = ItBBTotals->second.find(MBB);
+            if (It != ItBBTotals->second.end())
+              BBTotal = It->second;
+          }
+          BBObj["bb_total_lrsc_occurrences"] = BBTotal;
 
-      llvm::json::Object FlavorsObj;
-      if (ItBBFlavors != basicBlocksFlavourCounts.end() && MBB) {
-        auto ItF = ItBBFlavors->second.find(MBB);
-        if (ItF != ItBBFlavors->second.end()) {
-          for (const auto &OP : ItF->second)
-            FlavorsObj.try_emplace(OP.first, OP.second);
+          llvm::json::Object FlavorsObj;
+          if (ItBBFlavors != basicBlocksFlavourCounts.end() && MBB) {
+            auto ItF = ItBBFlavors->second.find(MBB);
+            if (ItF != ItBBFlavors->second.end()) {
+              for (const auto &OP : ItF->second)
+                FlavorsObj.try_emplace(OP.first, OP.second);
+            }
+          }
+
+          BBObj["flavors"] = std::move(FlavorsObj);
+          Blocks.push_back(std::move(BBObj));
         }
+
+        llvm::json::Object FObj;
+        FObj["total_lrsc_occurrences"] = FuncTotal;
+        FObj["basic_blocks"] = std::move(Blocks);
+
+        FuncMap.try_emplace(std::move(Name), std::move(FObj));
       }
 
-      BBObj["flavors"] = std::move(FlavorsObj);
-      Blocks.push_back(std::move(BBObj));
+      Root["functions"] = std::move(FuncMap);
+      return llvm::json::Value(std::move(Root));
     }
-
-    llvm::json::Object FObj;
-    FObj["total_lrsc_occurrences"] = FuncTotal;
-    FObj["basic_blocks"] = std::move(Blocks);
-
-    FuncMap.try_emplace(std::move(Name), std::move(FObj));
-  }
-
-  Root["functions"] = std::move(FuncMap);
-  return llvm::json::Value(std::move(Root));
-}
   };
   LRSCCounts Counts;
 };
@@ -175,12 +176,14 @@ FunctionPass *llvm::createRISCVCountLRSCPass() { return new RISCVCountLRSC(); }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 
-  
-
   Counts.basicBlockOrder[&MF]
-      .clear(); // Clear stored BB iteration order for this MF (ensures bb_index is 0..N-1 for this function).
-      auto &Order = Counts.basicBlockOrder[&MF]; // Alias per-function BB order vector (MF -> [BB pointers in traversal order]) for stable bb_index.
-      
+      .clear(); // Clear stored BB iteration order for this MF (ensures bb_index
+                // is 0..N-1 for this function).
+  auto &Order =
+      Counts.basicBlockOrder[&MF]; // Alias per-function BB order vector (MF ->
+                                   // [BB pointers in traversal order]) for
+                                   // stable bb_index.
+
   STI =
       &MF.getSubtarget<RISCVSubtarget>(); // Sub Target Instruction CPU features
                                           // :extensions, scheduling model, etc.
@@ -193,12 +196,15 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   // get the running count of detected LR/SC pairs [Ali]: We are not counting
   // pairs are we?
   for (auto &MBB : MF) {
-    Order.push_back(&MBB); // Record BB pointer in traversal order so JSON can emit all BBs (including zero-count) with a stable bb_index.
-
+    Order.push_back(
+        &MBB); // Record BB pointer in traversal order so JSON can emit all BBs
+               // (including zero-count) with a stable bb_index.
 
     bbCount = countLRSC(MBB, MF); // # LR/SC occurrences in a BB
 
-    Counts.basicBlocksCounts[&MF].try_emplace(&MBB, 0); // Ensure MF->BB entry exists even when this BB has zero LR/SC occurrences.
+    Counts.basicBlocksCounts[&MF].try_emplace(
+        &MBB, 0); // Ensure MF->BB entry exists even when this BB has zero LR/SC
+                  // occurrences.
     Counts.basicBlocksCounts[&MF][&MBB] +=
         bbCount; // # LR/SC occurrences in a BB added to the mapping of MF -> BB
                  // -> count
