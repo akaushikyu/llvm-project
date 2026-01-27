@@ -14,19 +14,8 @@
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVTargetMachine.h"
-// Added includes:
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/JSON.h"
-#include <string>
-#include <unordered_map>
-#include <vector>
-
+#include "RISCVCountLRSC.h"
 using namespace llvm;
-
 #define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
 #define DEBUG_TYPE "riscvcntlrsc"
 
@@ -49,119 +38,17 @@ public:
   void print(raw_ostream &OS) const;
 
 private:
+  /* Struct defined in LRSCCountUtils.hpp. */
+  LRSCCounts Counts;
+  
+  /* Added MachineFunction &MF as a parameter so LR/SC counts can be
+   * attributed to the containing function.
+   */
   unsigned countLRSC(MachineBasicBlock &MBB,
-                     MachineFunction &MF); // added &MF as a param
+                     MachineFunction &MF);
   unsigned totalCount = 0;
 
-  // How it used to be:
-  /*    std::unordered_map<const MachineFunction*, std::unordered_map<const
-     MachineBasicBlock*, std::unordered_map< uint16_t, int>>>
-     basicBlocksFlavourCounts; //mapping of MF address -> BB address -> (mapping
-     of opcode[uint16_t] -> count of LR/SC occurrences) std::unordered_map<const
-     MachineFunction*, std::unordered_map<const MachineBasicBlock* , int>>
-     basicBlocksCounts;// mapping of MF address -> BB address -> count of LR/SC
-     occurrences in the BB std::unordered_map<const MachineFunction*, int>
-     functionCounts;// mapping of MF address -> count of LR/SC occurrences in
-     the function
-  */
 
-  // Made a struct that gathers all of the umaps together
-  struct LRSCCounts {
-    using MFKey = const MachineFunction *;
-    using BBKey = const MachineBasicBlock *;
-    using OpKey = std::string;
-
-    using BBList = std::vector<BBKey>;
-    using MFToBBListMap = std::unordered_map<MFKey, BBList>;
-
-    // MF -> list of BB pointers in MF iteration order
-    MFToBBListMap basicBlockOrder;
-
-    using FlavourMap = std::unordered_map<OpKey, int>;
-    using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
-    using MFToBBFlavourMap = std::unordered_map<MFKey, BBToFlavourMap>;
-
-    using BBCountMap = std::unordered_map<BBKey, int>;
-    using MFToBBCountMap = std::unordered_map<MFKey, BBCountMap>;
-
-    using MFCountMap = std::unordered_map<MFKey, int>;
-
-    // MF -> BB -> (opcode -> count)
-    MFToBBFlavourMap basicBlocksFlavourCounts;
-
-    // MF -> BB -> total LR/SC occurrences (or pairs, depending on your
-    // definition)
-    MFToBBCountMap basicBlocksCounts;
-
-    // MF -> total LR/SC occurrences (or pairs)
-    MFCountMap functionCounts;
-
-    void clear() {
-      basicBlockOrder.clear();
-      basicBlocksFlavourCounts.clear();
-      basicBlocksCounts.clear();
-      functionCounts.clear();
-    }
-    llvm::json::Value toJSON() const {
-      llvm::json::Object Root;
-      llvm::json::Object FuncMap; // function-name -> { totals, basic_blocks }
-
-      for (const auto &FO : basicBlockOrder) {
-        const MachineFunction *MF = FO.first;
-        const auto &Order = FO.second;
-
-        std::string Name = MF ? MF->getName().str() : "<null>";
-
-        int FuncTotal = 0;
-        if (auto ItFT = functionCounts.find(MF); ItFT != functionCounts.end())
-          FuncTotal = ItFT->second;
-
-        llvm::json::Array Blocks;
-
-        auto ItBBTotals = basicBlocksCounts.find(MF);
-        auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
-
-        for (size_t i = 0; i < Order.size(); ++i) {
-          const MachineBasicBlock *MBB = Order[i];
-
-          llvm::json::Object BBObj;
-          BBObj["bb_index"] = static_cast<int64_t>(i);
-          BBObj["mbb_number"] =
-              MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
-
-          int BBTotal = 0;
-          if (ItBBTotals != basicBlocksCounts.end() && MBB) {
-            auto It = ItBBTotals->second.find(MBB);
-            if (It != ItBBTotals->second.end())
-              BBTotal = It->second;
-          }
-          BBObj["bb_total_lrsc_occurrences"] = BBTotal;
-
-          llvm::json::Object FlavorsObj;
-          if (ItBBFlavors != basicBlocksFlavourCounts.end() && MBB) {
-            auto ItF = ItBBFlavors->second.find(MBB);
-            if (ItF != ItBBFlavors->second.end()) {
-              for (const auto &OP : ItF->second)
-                FlavorsObj.try_emplace(OP.first, OP.second);
-            }
-          }
-
-          BBObj["flavors"] = std::move(FlavorsObj);
-          Blocks.push_back(std::move(BBObj));
-        }
-
-        llvm::json::Object FObj;
-        FObj["total_lrsc_occurrences"] = FuncTotal;
-        FObj["basic_blocks"] = std::move(Blocks);
-
-        FuncMap.try_emplace(std::move(Name), std::move(FObj));
-      }
-
-      Root["functions"] = std::move(FuncMap);
-      return llvm::json::Value(std::move(Root));
-    }
-  };
-  LRSCCounts Counts;
 };
 
 } // end anonymous namespace
@@ -175,149 +62,132 @@ RISCVCountLRSC::~RISCVCountLRSC() { print(dbgs()); }
 FunctionPass *llvm::createRISCVCountLRSCPass() { return new RISCVCountLRSC(); }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
+  llvm::errs() << "RISCVCountLRSC: " << MF.getName() << "\n";
 
+  /* Clear stored basic block iteration order for this MachineFunction so the
+   * basic block index runs from 0 to N - 1 for this function.
+   */
   Counts.basicBlockOrder[&MF]
-      .clear(); // Clear stored BB iteration order for this MF (ensures bb_index
-                // is 0..N-1 for this function).
-  auto &Order =
-      Counts.basicBlockOrder[&MF]; // Alias per-function BB order vector (MF ->
-                                   // [BB pointers in traversal order]) for
-                                   // stable bb_index.
+      .clear();
 
+  /* Alias the per-function basic block order vector
+   * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
+   */
+  auto &Order =
+      Counts.basicBlockOrder[&MF];
+
+  /* Subtarget instruction CPU features: extensions, scheduling model, etc. */
   STI =
-      &MF.getSubtarget<RISCVSubtarget>(); // Sub Target Instruction CPU features
-                                          // :extensions, scheduling model, etc.
-  TII = STI->getInstrInfo(); // Instruction Info Table : opcodes, pseudo
-                             // expansion info, etc.
+      &MF.getSubtarget<RISCVSubtarget>();
+
+  /* Instruction info table: opcodes, pseudo expansion info, etc. */
+  TII = STI->getInstrInfo();
+
   unsigned bbCount = 0;
   unsigned mfCount = 0;
 
-  // traverse through the machine basic blocks and
-  // get the running count of detected LR/SC pairs [Ali]: We are not counting
-  // pairs are we?
+  /* Traverse the machine basic blocks in this MachineFunction and accumulate
+   * LR/SC instruction counts per basic block and for the entire function.
+   * Note: this currently counts individual LR/SC instructions, not explicit
+   * LR/SC pairs.
+   */
   for (auto &MBB : MF) {
+
+    /* Record this basic block pointer in traversal order so JSON can emit all
+     * basic blocks (including zero-count ones) with a stable bb_index.
+     */
     Order.push_back(
-        &MBB); // Record BB pointer in traversal order so JSON can emit all BBs
-               // (including zero-count) with a stable bb_index.
+        &MBB);
 
-    bbCount = countLRSC(MBB, MF); // # LR/SC occurrences in a BB
+    /* Number of LR/SC instructions detected in this basic block. */
+    bbCount = countLRSC(MBB, MF);
 
+    /* Ensure the MF -> BB entry exists even if this basic block has zero
+     * LR/SC instructions.
+     */
     Counts.basicBlocksCounts[&MF].try_emplace(
-        &MBB, 0); // Ensure MF->BB entry exists even when this BB has zero LR/SC
-                  // occurrences.
-    Counts.basicBlocksCounts[&MF][&MBB] +=
-        bbCount; // # LR/SC occurrences in a BB added to the mapping of MF -> BB
-                 // -> count
-    mfCount += bbCount; // # LR/SC occurrences in a BB added to the total number
-                        // of instructions for the fucntion
+        &MBB, 0);
+
+    /* Update the MF -> BB -> count mapping with the LR/SC count for this
+     * basic block.
+     */
+    Counts.updateBBCnt(MF,MBB, bbCount);
+
+    /* Accumulate the LR/SC count for this basic block into the total for this
+     * function.
+     */
+    mfCount += bbCount;
   }
-  totalCount += mfCount; // # LR/SC occurrences in a BB added to the total
-                         // number of instructions for the whole compilation
-  Counts.functionCounts[&MF] += mfCount; // # LR/SC occurrences in a BB added to
-                                         // the mapping of MF -> count
-  return false; // returns false right? we are not modifying the code during
-                // compilation
+
+  /* Accumulate the per-function LR/SC count into the total for the entire
+   * compilation unit.
+   */
+  totalCount += mfCount;
+
+  /* Update the MF -> count mapping with the LR/SC count for this function. */
+  Counts.updateMFCnt(MF, mfCount);
+
+  /* This pass is read-only and does not modify the MachineFunction, so
+   * return false.
+   */
+  return false;
 }
 
 unsigned
 RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
-                          MachineFunction &MF) { // added &MF as a param
+                          MachineFunction &MF) {
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
 
-  // iterates over each MBBI and compares the opcode to every flavour of LR/SC
-  // instructions and adds to the count of each flavour of each instruction in
-  // an unordered mapping
-
+  /* Iterate over each instruction in the basic block, classify its opcode
+   * against all LR/SC instruction flavours, and update the per-flavour
+   * counts in the LRSCCounts mapping.
+   */
   unsigned total = 0;
   uint16_t opc = 0;
   while (MBBI != E) {
 
-    opc = MBBI->getOpcode();
-    switch (opc) {
-    // LR flavours
-    case RISCV::LR_W:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_W"]++;
-      total++;
-      break;
-    case RISCV::LR_D:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_D"]++;
-      total++;
-      break;
-    case RISCV::LR_D_AQ:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_D_AQ"]++;
-      total++;
-      break;
-    case RISCV::LR_W_AQ:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_W_AQ"]++;
-      total++;
-      break;
-    case RISCV::LR_D_RL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_D_RL"]++;
-      total++;
-      break;
-    case RISCV::LR_W_RL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_W_RL"]++;
-      total++;
-      break;
-    case RISCV::LR_D_AQRL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_D_AQRL"]++;
-      total++;
-      break;
-    case RISCV::LR_W_AQRL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["LR_W_AQRL"]++;
-      total++;
-      break;
+   opc = MBBI->getOpcode();
+switch (opc) {
+        // LR flavours
+      case RISCV::LR_W:      Counts.updateBBFlavCnt(MF, MBB, "LR_W");      total++; break;
+      case RISCV::LR_D:      Counts.updateBBFlavCnt(MF, MBB, "LR_D");      total++; break;
+      case RISCV::LR_D_AQ:   Counts.updateBBFlavCnt(MF, MBB, "LR_D_AQ");   total++; break;
+      case RISCV::LR_W_AQ:   Counts.updateBBFlavCnt(MF, MBB, "LR_W_AQ");   total++; break;
+      case RISCV::LR_D_RL:   Counts.updateBBFlavCnt(MF, MBB, "LR_D_RL");   total++; break;
+      case RISCV::LR_W_RL:   Counts.updateBBFlavCnt(MF, MBB, "LR_W_RL");   total++; break;
+      case RISCV::LR_D_AQRL: Counts.updateBBFlavCnt(MF, MBB, "LR_D_AQRL"); total++; break;
+      case RISCV::LR_W_AQRL: Counts.updateBBFlavCnt(MF, MBB, "LR_W_AQRL"); total++; break;
 
       // SC flavours
-    case RISCV::SC_W:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_W"]++;
-      total++;
-      break;
-    case RISCV::SC_D:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_D"]++;
-      total++;
-      break;
-    case RISCV::SC_D_AQ:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_D_AQ"]++;
-      total++;
-      break;
-    case RISCV::SC_W_AQ:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_W_AQ"]++;
-      total++;
-      break;
-    case RISCV::SC_D_RL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_D_RL"]++;
-      total++;
-      break;
-    case RISCV::SC_W_RL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_W_RL"]++;
-      total++;
-      break;
-    case RISCV::SC_D_AQRL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_D_AQRL"]++;
-      total++;
-      break;
-    case RISCV::SC_W_AQRL:
-      Counts.basicBlocksFlavourCounts[&MF][&MBB]["SC_W_AQRL"]++;
-      total++;
-      break;
+      case RISCV::SC_W:      Counts.updateBBFlavCnt(MF, MBB, "SC_W");      total++; break;
+      case RISCV::SC_D:      Counts.updateBBFlavCnt(MF, MBB, "SC_D");      total++; break;
+      case RISCV::SC_D_AQ:   Counts.updateBBFlavCnt(MF, MBB, "SC_D_AQ");   total++; break;
+      case RISCV::SC_W_AQ:   Counts.updateBBFlavCnt(MF, MBB, "SC_W_AQ");   total++; break;
+      case RISCV::SC_D_RL:   Counts.updateBBFlavCnt(MF, MBB, "SC_D_RL");   total++; break;
+      case RISCV::SC_W_RL:   Counts.updateBBFlavCnt(MF, MBB, "SC_W_RL");   total++; break;
+      case RISCV::SC_D_AQRL: Counts.updateBBFlavCnt(MF, MBB, "SC_D_AQRL"); total++; break;
+      case RISCV::SC_W_AQRL: Counts.updateBBFlavCnt(MF, MBB, "SC_W_AQRL"); total++; break;
 
-    default:
-      break;
-    }
-
-    MBBI++;
+      default:
+    /* Opcode is not an LR/SC flavour that this pass tracks. */
+    break;
   }
+}
   return total;
 }
 
 void RISCVCountLRSC::print(raw_ostream &OS) const {
-  OS << "Number of LR/SC instruction: " << totalCount << "\n";
-
+  OS << "Number of LR/SC instruction pairs: " << " " << totalCount << "\n";
   llvm::json::Value J = Counts.toJSON();
-
-  // Pretty print with indent=2
+  #if defined(EM_JSON)
+  OS << "EM_JSON enabled\n";
   OS << llvm::formatv("{0:2}", J) << "\n";
+  
+  #else
+  OS << "EM_JSON disabled\n";
+  #endif
+  /* Pretty-print JSON with indent = 2. */
 }
+  

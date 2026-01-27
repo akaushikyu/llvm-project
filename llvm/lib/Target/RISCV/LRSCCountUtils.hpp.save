@@ -1,0 +1,111 @@
+namespace llvm {
+  struct LRSCCounts {
+    using MFKey = const MachineFunction *;
+    using BBKey = const MachineBasicBlock *;
+    using OpKey = std::string;
+
+    using BBList = std::vector<BBKey>;
+    using MFToBBListMap = std::unordered_map<MFKey, BBList>;
+    
+    // MF -> list of BB pointers in MF iteration order
+    MFToBBListMap basicBlockOrder;
+    
+    using FlavourMap = std::unordered_map<OpKey, int>;
+    using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
+    using MFToBBFlavourMap = std::unordered_map<MFKey, BBToFlavourMap>;
+
+    using BBCountMap = std::unordered_map<BBKey, int>;
+    using MFToBBCountMap = std::unordered_map<MFKey, BBCountMap>;
+
+    using MFCountMap = std::unordered_map<MFKey, int>;
+    
+    // MF -> BB -> (opcode -> count)
+    MFToBBFlavourMap basicBlocksFlavourCounts;
+    
+    // MF -> BB -> total LR/SC occurrences (or pairs, depending on your
+    // definition)
+    MFToBBCountMap basicBlocksCounts;
+
+    // MF -> total LR/SC occurrences (or pairs)
+    MFCountMap functionCounts;
+    
+    void clearAll() {
+      basicBlockOrder.clear();
+      basicBlocksFlavourCounts.clear();
+      basicBlocksCounts.clear();
+      functionCounts.clear();
+    }
+    void updateMFCnt(MF, mfCount){
+      functionCounts[&MF] += mfCount;
+
+    }
+    void updateBBCnt(MF,MBB, bbCount){
+      basicBlocksCounts[&MF][&MBB] += bbCount;
+
+      }
+    void updateBBFlavCnt(MF,MBB, std::string OpKey){
+      basicBlocksFlavourCounts[&MF][&MBB][OpKey]++;
+
+      }
+
+    llvm::json::Value toJSON() const {
+      llvm::json::Object Root;
+      llvm::json::Object FuncMap; // function-name -> { totals, basic_blocks }
+
+      for (const auto &FO : basicBlockOrder) {
+        const MachineFunction *MF = FO.first;
+        const auto &Order = FO.second;
+
+        std::string Name = MF ? MF->getName().str() : "<null>";
+
+        int FuncTotal = 0;
+        if (auto ItFT = functionCounts.find(MF); ItFT != functionCounts.end())
+          FuncTotal = ItFT->second;
+
+        llvm::json::Array Blocks; 
+
+        auto ItBBTotals = basicBlocksCounts.find(MF);
+        auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
+
+        for (size_t i = 0; i < Order.size(); ++i) {
+          const MachineBasicBlock *MBB = Order[i];
+
+          llvm::json::Object BBObj;
+          BBObj["bb_index"] = static_cast<int64_t>(i);
+          BBObj["mbb_number"] =
+              MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
+
+          int BBTotal = 0;
+          if (ItBBTotals != basicBlocksCounts.end() && MBB) {
+            auto It = ItBBTotals->second.find(MBB);
+            if (It != ItBBTotals->second.end())
+              BBTotal = It->second;
+          }
+          BBObj["bb_total_lrsc_occurrences"] = BBTotal;
+
+          llvm::json::Object FlavorsObj;
+          if (ItBBFlavors != basicBlocksFlavourCounts.end() && MBB) {
+            auto ItF = ItBBFlavors->second.find(MBB);
+            if (ItF != ItBBFlavors->second.end()) {
+              for (const auto &OP : ItF->second)
+                FlavorsObj.try_emplace(OP.first, OP.second);
+            }
+          }
+
+          BBObj["flavors"] = std::move(FlavorsObj);
+          Blocks.push_back(std::move(BBObj));
+        }
+
+        llvm::json::Object FObj;
+        FObj["total_lrsc_occurrences"] = FuncTotal;
+        FObj["basic_blocks"] = std::move(Blocks);
+    
+        FuncMap.try_emplace(std::move(Name), std::move(FObj));
+      }
+
+      Root["functions"] = std::move(FuncMap);
+      return llvm::json::Value(std::move(Root));
+    }
+  };
+
+}
