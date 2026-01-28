@@ -1,5 +1,5 @@
-; ModuleID = 'test/one_lrsc.c'
-source_filename = "test/one_lrsc.c"
+; ModuleID = 'tests/one_lrsc.c'
+source_filename = "tests/one_lrsc.c"
 target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
 target triple = "riscv64-unknown-unknown-elf"
 

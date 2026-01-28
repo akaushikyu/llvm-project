@@ -145,9 +145,10 @@ namespace llvm {
 
         /* Look up the function-level total, defaulting to 0 if absent. */
         int FuncTotal = 0;
-        if (auto ItFT = functionCounts.find(MF); ItFT != functionCounts.end())
+        auto ItFT = functionCounts.find(MF);
+        if (ItFT != functionCounts.end()) {
           FuncTotal = ItFT->second;
-
+        }
         /* Array of per-basic-block JSON objects for this function. */
         llvm::json::Array Blocks;
 
