@@ -11,99 +11,227 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "LRSCCountUtils.hpp"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/JSON.h"
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVTargetMachine.h"
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 using namespace llvm;
-
 #define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
 #define DEBUG_TYPE "riscvcntlrsc"
+
+static cl::opt<bool> RISCVCountLRSCEmitJSON(
+    "dump-insn-stats-json",
+    cl::desc(
+        "The JSON Emission Control  is used for controlling JSON format emission. Affects  "),
+    cl::init(false));
+
 
 namespace {
 
 class RISCVCountLRSC : public MachineFunctionPass {
-  public:
-    const RISCVSubtarget *STI;
-    const RISCVInstrInfo *TII;
+public:
+  const RISCVSubtarget *STI;
+  const RISCVInstrInfo *TII;
 
-    static char ID;
+  static char ID;
 
-    RISCVCountLRSC() : MachineFunctionPass(ID) {}
-    ~RISCVCountLRSC();
+  RISCVCountLRSC() : MachineFunctionPass(ID) {}
+  ~RISCVCountLRSC();
 
-    bool runOnMachineFunction(MachineFunction &MF) override;
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
-    StringRef getPassName() const override { return RISCV_COUNT_LR_SC_NAME; }
+  StringRef getPassName() const override { return RISCV_COUNT_LR_SC_NAME; }
 
-    void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 
- private:
+private:
+  /* Struct defined in LRSCCountUtils.hpp. */
+  LRSCCounts Counts;
+  
+  /* Added MachineFunction &MF as a parameter so LR/SC counts can be
+   * attributed to the containing function.
+   */
+  unsigned countLRSC(MachineBasicBlock &MBB,
+                     MachineFunction &MF);
+  unsigned totalCount = 0;
 
-    unsigned countLRSC(MachineBasicBlock &MBB);
-    unsigned totalCount = 0; 
+
 };
 
 } // end anonymous namespace
 
+std::string stringify(uint16_t opc){
+  switch (opc) {
+  // LR flavours
+  case RISCV::LR_W:      return "LR_W";
+  case RISCV::LR_D:      return "LR_D";
+  case RISCV::LR_D_AQ:   return "LR_D_AQ";
+  case RISCV::LR_W_AQ:   return "LR_W_AQ";
+  case RISCV::LR_D_RL:   return "LR_D_RL";
+  case RISCV::LR_W_RL:   return "LR_W_RL";
+  case RISCV::LR_D_AQRL: return "LR_D_AQRL";
+  case RISCV::LR_W_AQRL: return "LR_W_AQRL";
+
+  // SC flavours
+  case RISCV::SC_W:      return "SC_W";
+  case RISCV::SC_D:      return "SC_D";
+  case RISCV::SC_D_AQ:   return "SC_D_AQ";
+  case RISCV::SC_W_AQ:   return "SC_W_AQ";
+  case RISCV::SC_D_RL:   return "SC_D_RL";
+  case RISCV::SC_W_RL:   return "SC_W_RL";
+  case RISCV::SC_D_AQRL: return "SC_D_AQRL";
+  case RISCV::SC_W_AQRL: return "SC_W_AQRL";
+
+  default:
+    return "";
+  }
+}
 char RISCVCountLRSC::ID = 0;
-INITIALIZE_PASS(RISCVCountLRSC, "riscv-count-lr-sc",
-                RISCV_COUNT_LR_SC_NAME, false, false)
+INITIALIZE_PASS(RISCVCountLRSC, "riscv-count-lr-sc", RISCV_COUNT_LR_SC_NAME,
+                false, false)
 
-RISCVCountLRSC::~RISCVCountLRSC() {
-  print(dbgs());
-}
+RISCVCountLRSC::~RISCVCountLRSC() { print(dbgs()); }
 
-FunctionPass *llvm::createRISCVCountLRSCPass() {
-  return new RISCVCountLRSC();
-}
+FunctionPass *llvm::createRISCVCountLRSCPass() { return new RISCVCountLRSC(); }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
-  STI = &MF.getSubtarget<RISCVSubtarget>();
+  llvm::errs() << "RISCVCountLRSC: " << MF.getName() << "\n";
+
+  /* Clear stored basic block iteration order for this MachineFunction so the
+   * basic block index runs from 0 to N - 1 for this function.
+   */
+  Counts.basicBlockOrder[&MF]
+      .clear();
+
+  /* Alias the per-function basic block order vector
+   * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
+   */
+  auto &Order =
+      Counts.basicBlockOrder[&MF];
+
+  /* Subtarget instruction CPU features: extensions, scheduling model, etc. */
+  STI =
+      &MF.getSubtarget<RISCVSubtarget>();
+
+  /* Instruction info table: opcodes, pseudo expansion info, etc. */
   TII = STI->getInstrInfo();
 
-  // traverse through the machine basic blocks and 
-  // get the running count of detected LR/SC pairs
+  unsigned insnPerBBCnt = 0;
+  unsigned insnPerMFCnt = 0;
+
+  /* Traverse the machine basic blocks in this MachineFunction and accumulate
+   * LR/SC instruction counts per basic block and for the entire function.
+   * Note: this currently counts individual LR/SC instructions, not explicit
+   * LR/SC pairs.
+   */
   for (auto &MBB : MF) {
-    totalCount += countLRSC(MBB);
+
+    /* Record this basic block pointer in traversal order so JSON can emit all
+     * basic blocks (including zero-count ones) with a stable bb_index.
+     */
+    Order.push_back(
+        &MBB);
+
+    /* Number of LR/SC instructions detected in this basic block. */
+    insnPerBBCnt = countLRSC(MBB, MF);
+
+    /* Ensure the MF -> BB entry exists even if this basic block has zero
+     * LR/SC instructions.
+     */
+    Counts.basicBlocksCounts[&MF].try_emplace(
+        &MBB, 0);
+
+    /* Update the MF -> BB -> count mapping with the LR/SC count for this
+     * basic block.
+     */
+    Counts.updateBBCnt(MF,MBB, insnPerBBCnt);
+
+    /* Accumulate the LR/SC count for this basic block into the total for this
+     * function.
+     */
+    insnPerMFCnt += insnPerBBCnt;
   }
-  return true;
+
+  /* Accumulate the per-function LR/SC count into the total for the entire
+   * compilation unit.
+   */
+  totalCount += insnPerMFCnt;
+
+  /* Update the MF -> count mapping with the LR/SC count for this function. */
+  Counts.updateMFCnt(MF, insnPerMFCnt);
+
+  /* This pass is read-only and does not modify the MachineFunction, so
+   * return false.
+   */
+  return false;
 }
 
-unsigned RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB) {
+unsigned
+RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
+                          MachineFunction &MF) {
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
 
-  unsigned bbCnt = 0;
+  /* Iterate over each instruction in the basic block, classify its opcode
+   * against all LR/SC instruction flavours, and update the per-flavour
+   * counts in the LRSCCounts mapping.
+   */
+  unsigned total = 0;
+  uint16_t opc = 0;
   while (MBBI != E) {
-    if (MBBI->getOpcode() == RISCV::LR_W || 
-        MBBI->getOpcode() == RISCV::LR_D ||
-        MBBI->getOpcode() == RISCV::LR_D_AQ ||
-        MBBI->getOpcode() == RISCV::LR_W_AQ ||
-        MBBI->getOpcode() == RISCV::LR_D_RL ||
-        MBBI->getOpcode() == RISCV::LR_W_RL ||
-        MBBI->getOpcode() == RISCV::LR_D_AQRL || 
-        MBBI->getOpcode() == RISCV::LR_W_AQRL) {
-      bbCnt ++;
-    } else if (MBBI->getOpcode() == RISCV::SC_W  || 
-               MBBI->getOpcode() == RISCV::SC_D  ||
-               MBBI->getOpcode() == RISCV::SC_D_AQ ||
-               MBBI->getOpcode() == RISCV::SC_W_AQ ||
-               MBBI->getOpcode() == RISCV::SC_D_RL ||
-               MBBI->getOpcode() == RISCV::SC_W_AQ ||
-               MBBI->getOpcode() == RISCV::SC_D_AQRL ||
-               MBBI->getOpcode() == RISCV::SC_W_AQRL) {
-      bbCnt++;
-    }
-    MBBI++;
-  }
 
-  return bbCnt;
+    opc = MBBI->getOpcode();
+    switch (opc) {
+      // LR flavours
+      case RISCV::LR_W:      
+      case RISCV::LR_D:      
+      case RISCV::LR_D_AQ:   
+      case RISCV::LR_W_AQ:   
+      case RISCV::LR_D_RL:   
+      case RISCV::LR_W_RL:  
+      case RISCV::LR_D_AQRL: 
+      case RISCV::LR_W_AQRL: 
+      // SC flavours
+      case RISCV::SC_W:      
+      case RISCV::SC_D:      
+      case RISCV::SC_D_AQ:   
+      case RISCV::SC_W_AQ:   
+      case RISCV::SC_D_RL:   
+      case RISCV::SC_W_RL:   
+      case RISCV::SC_D_AQRL: 
+      case RISCV::SC_W_AQRL: 
+        Counts.updateBBFlavCnt(MF, MBB, stringify(opc));      
+        total++; 
+        break;
+
+      default:
+      /* Opcode is not an LR/SC flavour that this pass tracks. */
+        break;
+    }
+      MBBI++;
+  }
+  return total;
 }
 
 void RISCVCountLRSC::print(raw_ostream &OS) const {
-  OS << "Number of LR/SC instruction pairs: " << " " << totalCount << "\n";
+  if (RISCVCountLRSCEmitJSON) {
+    llvm::json::Value J = Counts.toJSON();
+    OS << llvm::formatv("{0:2}", J) << "\n";
+    return;
+  }
+
+  OS << "Number of LR/SC instruction: " << totalCount << "\n";
 }
-
-
+  
