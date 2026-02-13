@@ -33,7 +33,7 @@ using namespace llvm;
 static cl::opt<bool> RISCVCountLRSCEmitJSON(
     "dump-insn-stats-json",
     cl::desc(
-        "The JSON Emission Control  is used for controlling JSON format emission. Affects  "),
+        "The JSON Emission Control is used for controlling JSON format emission. Affects  "),
     cl::init(false));
 
 
@@ -57,21 +57,19 @@ public:
 
 private:
   /* Struct defined in LRSCCountUtils.hpp. */
-  LRSCCounts Counts;
-  
+  utils::LRSCCounts Counts;
+
   /* Added MachineFunction &MF as a parameter so LR/SC counts can be
    * attributed to the containing function.
    */
   unsigned countLRSC(MachineBasicBlock &MBB,
                      MachineFunction &MF);
   unsigned totalCount = 0;
-
-
 };
 
 } // end anonymous namespace
 
-std::string stringify(uint16_t opc){
+std::string stringifyOpcode(uint16_t opc){
   switch (opc) {
   // LR flavours
   case RISCV::LR_W:      return "LR_W";
@@ -111,14 +109,15 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
    */
-  Counts.basicBlockOrder[&MF]
-      .clear();
+  auto &F = MF.getFunction();
+
+  Counts.basicBlockOrder[&F] = std::vector<const MachineBasicBlock*>(0, nullptr);
 
   /* Alias the per-function basic block order vector
    * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
    */
   auto &Order =
-      Counts.basicBlockOrder[&MF];
+      Counts.basicBlockOrder[&F];
 
   /* Subtarget instruction CPU features: extensions, scheduling model, etc. */
   STI =
@@ -149,13 +148,13 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     /* Ensure the MF -> BB entry exists even if this basic block has zero
      * LR/SC instructions.
      */
-    Counts.basicBlocksCounts[&MF].try_emplace(
+    Counts.basicBlocksCounts[&F].try_emplace(
         &MBB, 0);
 
     /* Update the MF -> BB -> count mapping with the LR/SC count for this
      * basic block.
      */
-    Counts.updateBBCnt(MF,MBB, insnPerBBCnt);
+    Counts.updateBBCnt(MF, MBB, insnPerBBCnt);
 
     /* Accumulate the LR/SC count for this basic block into the total for this
      * function.
@@ -195,25 +194,25 @@ RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
     opc = MBBI->getOpcode();
     switch (opc) {
       // LR flavours
-      case RISCV::LR_W:      
-      case RISCV::LR_D:      
-      case RISCV::LR_D_AQ:   
-      case RISCV::LR_W_AQ:   
-      case RISCV::LR_D_RL:   
-      case RISCV::LR_W_RL:  
-      case RISCV::LR_D_AQRL: 
-      case RISCV::LR_W_AQRL: 
+      case RISCV::LR_W:
+      case RISCV::LR_D:
+      case RISCV::LR_D_AQ:
+      case RISCV::LR_W_AQ:
+      case RISCV::LR_D_RL:
+      case RISCV::LR_W_RL:
+      case RISCV::LR_D_AQRL:
+      case RISCV::LR_W_AQRL:
       // SC flavours
-      case RISCV::SC_W:      
-      case RISCV::SC_D:      
-      case RISCV::SC_D_AQ:   
-      case RISCV::SC_W_AQ:   
-      case RISCV::SC_D_RL:   
-      case RISCV::SC_W_RL:   
-      case RISCV::SC_D_AQRL: 
-      case RISCV::SC_W_AQRL: 
-        Counts.updateBBFlavCnt(MF, MBB, stringify(opc));      
-        total++; 
+      case RISCV::SC_W:
+      case RISCV::SC_D:
+      case RISCV::SC_D_AQ:
+      case RISCV::SC_W_AQ:
+      case RISCV::SC_D_RL:
+      case RISCV::SC_W_RL:
+      case RISCV::SC_D_AQRL:
+      case RISCV::SC_W_AQRL:
+        Counts.updateBBFlavCnt(MF, MBB, stringifyOpcode(opc));
+        total++;
         break;
 
       default:
@@ -234,4 +233,4 @@ void RISCVCountLRSC::print(raw_ostream &OS) const {
 
   OS << "Number of LR/SC instruction: " << totalCount << "\n";
 }
-  
+
