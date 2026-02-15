@@ -34,7 +34,6 @@ namespace utils {
     using BBList = std::vector<BBKey>;
 
     /*--------------------------------------------------------------------------*/
-
     /* FuncToBBListMap: maps each function to its BB iteration order list. */
     using FuncToBBListMap = std::unordered_map<FKey, BBList>;
 
@@ -81,6 +80,7 @@ namespace utils {
     /* Func -> total LR/SC occurrences (or pairs)
        Stores per-function totals. */
     FuncCountMap functionCounts;
+
     /*--------------------------------------------------------------------------*/
     /* Clears all stored data across every map. */
     void clearAll() {
@@ -156,7 +156,7 @@ namespace utils {
         llvm::json::Array Blocks;
 
         /* Pre-locate iterators for per-BB totals and per-BB flavor maps for MF.
-           If MF is missing from either map, loo	kups fall back to defaults. */
+           If MF is missing from either map, lookups fall back to defaults. */
         auto ItBBTotals = basicBlocksCounts.find(MF);
         auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
 
@@ -194,7 +194,7 @@ namespace utils {
             auto ItF = ItBBFlavors->second.find(BBNum);
             if (ItF != ItBBFlavors->second.end()) {
               for (const auto &OP : ItF->second){
-               FlavorsObj.try_emplace(OP.first, OP.second);
+                FlavorsObj.try_emplace(OP.first, OP.second);
               }
             }
           }

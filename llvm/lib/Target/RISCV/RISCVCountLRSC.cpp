@@ -33,7 +33,7 @@ using namespace llvm;
 static cl::opt<bool> RISCVCountLRSCEmitJSON(
     "dump-insn-stats-json",
     cl::desc(
-        "The JSON Emission Control is used for controlling JSON format emission. Affects  "),
+        "The JSON Emission Control is used for controlling JSON format emission."),
     cl::init(false));
 
 
@@ -111,7 +111,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
    */
   auto &F = MF.getFunction();
 
-  Counts.basicBlockOrder[&F] = std::vector<const MachineBasicBlock*>(0, nullptr);
+  Counts.basicBlockOrder[&F] = std::vector<int>();
 
   /* Alias the per-function basic block order vector
    * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
@@ -139,8 +139,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     /* Record this basic block pointer in traversal order so JSON can emit all
      * basic blocks (including zero-count ones) with a stable bb_index.
      */
-    Order.push_back(
-        &MBB);
+    Order.push_back(MBB.getNumber());
 
     /* Number of LR/SC instructions detected in this basic block. */
     insnPerBBCnt = countLRSC(MBB, MF);
@@ -149,7 +148,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
      * LR/SC instructions.
      */
     Counts.basicBlocksCounts[&F].try_emplace(
-        &MBB, 0);
+        MBB.getNumber(), 0);
 
     /* Update the MF -> BB -> count mapping with the LR/SC count for this
      * basic block.
