@@ -25,7 +25,7 @@ namespace utils {
     // Using llvm::Function as opposed to MachineFunction as we can always
     // get the machine function from Function.
     using FKey = const Function *;
-    using BBKey = const MachineBasicBlock *;
+    using BBKey = int;
     using OpKey = std::string;
 
     /*--------------------------------------------------------------------------*/
@@ -34,6 +34,7 @@ namespace utils {
     using BBList = std::vector<BBKey>;
 
     /*--------------------------------------------------------------------------*/
+
     /* FuncToBBListMap: maps each function to its BB iteration order list. */
     using FuncToBBListMap = std::unordered_map<FKey, BBList>;
 
@@ -80,7 +81,6 @@ namespace utils {
     /* Func -> total LR/SC occurrences (or pairs)
        Stores per-function totals. */
     FuncCountMap functionCounts;
-
     /*--------------------------------------------------------------------------*/
     /* Clears all stored data across every map. */
     void clearAll() {
@@ -99,13 +99,15 @@ namespace utils {
     /*--------------------------------------------------------------------------*/
     /* Updates the per-basic-block total count for (MF, MBB) by adding bbCount. */
     void updateBBCnt(const MachineFunction &MF,const MachineBasicBlock &MBB,unsigned bbCount){
-      basicBlocksCounts[&MF.getFunction()][&MBB] += bbCount;
+      int BBNum = MBB.getNumber();
+      basicBlocksCounts[&MF.getFunction()][BBNum] += bbCount;
     }
 
     /*--------------------------------------------------------------------------*/
     /* Increments the opcode/flavor counter for (MF, MBB, OpKey) by 1. */
     void updateBBFlavCnt(const MachineFunction &MF,const MachineBasicBlock &MBB, std::string OpKey){
-      basicBlocksFlavourCounts[&MF.getFunction()][&MBB][OpKey]++;
+      int BBNum = MBB.getNumber();
+      basicBlocksFlavourCounts[&MF.getFunction()][BBNum][OpKey]++;
     }
 
     /*--------------------------------------------------------------------------*/
@@ -154,14 +156,14 @@ namespace utils {
         llvm::json::Array Blocks;
 
         /* Pre-locate iterators for per-BB totals and per-BB flavor maps for MF.
-           If MF is missing from either map, lookups fall back to defaults. */
+           If MF is missing from either map, loo	kups fall back to defaults. */
         auto ItBBTotals = basicBlocksCounts.find(MF);
         auto ItBBFlavors = basicBlocksFlavourCounts.find(MF);
 
         /* Emit BB objects in the same order stored in basicBlockOrder[MF]. */
         for (size_t i = 0; i < Order.size(); ++i) {
-          /* BB pointer at this position in iteration order. */
-          const MachineBasicBlock *MBB = Order[i];
+          /* BB Number at this position in iteration order. */
+          int BBNum = Order[i];
 
           /* JSON object holding this BB's metadata and counts. */
           llvm::json::Object BBObj;
@@ -169,17 +171,17 @@ namespace utils {
           /* Stable index based on traversal order in Order[]. */
           BBObj["bb_index"] = static_cast<int64_t>(i);
 
-          /* LLVM internal BB number, or -1 if MBB is null. */
-          BBObj["mbb_number"] =
-              MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
+          /* LLVM internal BB number. */
+          BBObj["mbb_number"] = static_cast<int64_t>(BBNum);
 
           /* Look up BB total for this MF and BB, defaulting to 0 if absent. */
           int BBTotal = 0;
-          if (ItBBTotals != basicBlocksCounts.end() && MBB) {
-            auto It = ItBBTotals->second.find(MBB);
+          if (ItBBTotals != basicBlocksCounts.end()) {
+            auto It = ItBBTotals->second.find(BBNum);
             if (It != ItBBTotals->second.end())
               BBTotal = It->second;
           }
+
 
           /* Store the BB total under a dedicated JSON field. */
           BBObj["bb_total_lrsc_occurrences"] = BBTotal;
@@ -188,11 +190,12 @@ namespace utils {
           llvm::json::Object FlavorsObj;
 
           /* If flavor data exists for this MF and this BB, serialize it. */
-          if (ItBBFlavors != basicBlocksFlavourCounts.end() && MBB) {
-            auto ItF = ItBBFlavors->second.find(MBB);
+          if (ItBBFlavors != basicBlocksFlavourCounts.end()) {
+            auto ItF = ItBBFlavors->second.find(BBNum);
             if (ItF != ItBBFlavors->second.end()) {
-              for (const auto &OP : ItF->second)
-                FlavorsObj.try_emplace(OP.first, OP.second);
+              for (const auto &OP : ItF->second){
+               FlavorsObj.try_emplace(OP.first, OP.second);
+              }
             }
           }
 
