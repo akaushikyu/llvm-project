@@ -34,12 +34,12 @@ namespace utils {
     using BBList = std::vector<BBKey>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBListMap: maps each function to its BB iteration order list. */
-    using MFToBBListMap = std::unordered_map<FKey, BBList>;
+    /* FuncToBBListMap: maps each function to its BB iteration order list. */
+    using FuncToBBListMap = std::unordered_map<FKey, BBList>;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> list of BB pointers in MF iteration order */
-    MFToBBListMap basicBlockOrder;
+    /* MF -> list of BB pointers in Func iteration order */
+    FuncToBBListMap basicBlockOrder;
 
     /*--------------------------------------------------------------------------*/
     /* FlavourMap: opcode/flavor string -> count within a BB. */
@@ -50,36 +50,36 @@ namespace utils {
     using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBFlavourMap: MF -> (BB -> (opcode/flavor -> count)). */
-    using MFToBBFlavourMap = std::unordered_map<FKey, BBToFlavourMap>;
+    /* FuncToBBFlavourMap: Func -> (BB -> (opcode/flavor -> count)). */
+    using FuncToBBFlavourMap = std::unordered_map<FKey, BBToFlavourMap>;
 
     /*--------------------------------------------------------------------------*/
     /* BBCountMap: BB -> total LR/SC count in that BB (definition-dependent). */
     using BBCountMap = std::unordered_map<BBKey, int>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBCountMap: MF -> (BB -> total LR/SC count). */
-    using MFToBBCountMap = std::unordered_map<FKey, BBCountMap>;
+    /* FuncToBBCountMap: Func -> (BB -> total LR/SC count). */
+    using FuncToBBCountMap = std::unordered_map<FKey, BBCountMap>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFCountMap: MF -> total LR/SC count for the function. */
-    using MFCountMap = std::unordered_map<FKey, int>;
+    /* FuncCountMap: Func -> total LR/SC count for the function. */
+    using FuncCountMap = std::unordered_map<FKey, int>;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> BB -> (opcode -> count)
+    /* Func -> BB -> (opcode -> count)
        Stores per-basic-block opcode/flavor breakdowns per function. */
-    MFToBBFlavourMap basicBlocksFlavourCounts;
+    FuncToBBFlavourMap basicBlocksFlavourCounts;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> BB -> total LR/SC occurrences (or pairs, depending on your
+    /* Func -> BB -> total LR/SC occurrences (or pairs, depending on your
        definition)
        Stores per-basic-block totals per function. */
-    MFToBBCountMap basicBlocksCounts;
+    FuncToBBCountMap basicBlocksCounts;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> total LR/SC occurrences (or pairs)
+    /* Func -> total LR/SC occurrences (or pairs)
        Stores per-function totals. */
-    MFCountMap functionCounts;
+    FuncCountMap functionCounts;
 
     /*--------------------------------------------------------------------------*/
     /* Clears all stored data across every map. */
@@ -91,10 +91,9 @@ namespace utils {
     }
 
     /*--------------------------------------------------------------------------*/
-    /* Updates the per-function total count for the provided MF by adding mfCount. */
-    void updateMFCnt(const MachineFunction &MF,unsigned  mfCount){
+    /* Updates the per-function total count for the provided Func by adding mfCount. */
+    void updateFuncCnt(const MachineFunction &MF,unsigned  mfCount){
       functionCounts[&MF.getFunction()] += mfCount;
-
     }
 
     /*--------------------------------------------------------------------------*/

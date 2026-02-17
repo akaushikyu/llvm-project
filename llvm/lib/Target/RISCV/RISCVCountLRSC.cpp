@@ -167,8 +167,8 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
    */
   totalCount += insnPerMFCnt;
 
-  /* Update the MF -> count mapping with the LR/SC count for this function. */
-  Counts.updateMFCnt(MF, insnPerMFCnt);
+  /* Update the Func -> count mapping with the LR/SC count for this function. */
+  Counts.updateFuncCnt(MF, insnPerMFCnt);
 
   /* This pass is read-only and does not modify the MachineFunction, so
    * return false.
