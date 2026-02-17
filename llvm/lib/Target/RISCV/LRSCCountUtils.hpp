@@ -1,11 +1,13 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/JSON.h"
 
 #include <string>
 #include <unordered_map>
 #include <vector>
-namespace llvm {
+using namespace llvm;
+namespace utils {
 
   /*--------------------------------------------------------------------------*/
   /* LRSCCounts: Aggregates LR/SC counting data at multiple granularities:
@@ -17,10 +19,12 @@ namespace llvm {
 
     /*--------------------------------------------------------------------------*/
     /* Key types used for hash maps.
-       - MFKey: identifies a function (by pointer identity)
+       - FKey: identifies a function (by pointer identity)
        - BBKey: identifies a basic block (by pointer identity)
        - OpKey: identifies an opcode/flavor label (string) */
-    using MFKey = const MachineFunction *;
+    // Using llvm::Function as opposed to MachineFunction as we can always
+    // get the machine function from Function.
+    using FKey = const Function *;
     using BBKey = const MachineBasicBlock *;
     using OpKey = std::string;
 
@@ -30,12 +34,12 @@ namespace llvm {
     using BBList = std::vector<BBKey>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBListMap: maps each function to its BB iteration order list. */
-    using MFToBBListMap = std::unordered_map<MFKey, BBList>;
+    /* FuncToBBListMap: maps each function to its BB iteration order list. */
+    using FuncToBBListMap = std::unordered_map<FKey, BBList>;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> list of BB pointers in MF iteration order */
-    MFToBBListMap basicBlockOrder;
+    /* MF -> list of BB pointers in Func iteration order */
+    FuncToBBListMap basicBlockOrder;
 
     /*--------------------------------------------------------------------------*/
     /* FlavourMap: opcode/flavor string -> count within a BB. */
@@ -46,36 +50,36 @@ namespace llvm {
     using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBFlavourMap: MF -> (BB -> (opcode/flavor -> count)). */
-    using MFToBBFlavourMap = std::unordered_map<MFKey, BBToFlavourMap>;
+    /* FuncToBBFlavourMap: Func -> (BB -> (opcode/flavor -> count)). */
+    using FuncToBBFlavourMap = std::unordered_map<FKey, BBToFlavourMap>;
 
     /*--------------------------------------------------------------------------*/
     /* BBCountMap: BB -> total LR/SC count in that BB (definition-dependent). */
     using BBCountMap = std::unordered_map<BBKey, int>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFToBBCountMap: MF -> (BB -> total LR/SC count). */
-    using MFToBBCountMap = std::unordered_map<MFKey, BBCountMap>;
+    /* FuncToBBCountMap: Func -> (BB -> total LR/SC count). */
+    using FuncToBBCountMap = std::unordered_map<FKey, BBCountMap>;
 
     /*--------------------------------------------------------------------------*/
-    /* MFCountMap: MF -> total LR/SC count for the function. */
-    using MFCountMap = std::unordered_map<MFKey, int>;
+    /* FuncCountMap: Func -> total LR/SC count for the function. */
+    using FuncCountMap = std::unordered_map<FKey, int>;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> BB -> (opcode -> count)
+    /* Func -> BB -> (opcode -> count)
        Stores per-basic-block opcode/flavor breakdowns per function. */
-    MFToBBFlavourMap basicBlocksFlavourCounts;
+    FuncToBBFlavourMap basicBlocksFlavourCounts;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> BB -> total LR/SC occurrences (or pairs, depending on your
+    /* Func -> BB -> total LR/SC occurrences (or pairs, depending on your
        definition)
        Stores per-basic-block totals per function. */
-    MFToBBCountMap basicBlocksCounts;
+    FuncToBBCountMap basicBlocksCounts;
 
     /*--------------------------------------------------------------------------*/
-    /* MF -> total LR/SC occurrences (or pairs)
+    /* Func -> total LR/SC occurrences (or pairs)
        Stores per-function totals. */
-    MFCountMap functionCounts;
+    FuncCountMap functionCounts;
 
     /*--------------------------------------------------------------------------*/
     /* Clears all stored data across every map. */
@@ -87,25 +91,22 @@ namespace llvm {
     }
 
     /*--------------------------------------------------------------------------*/
-    /* Updates the per-function total count for the provided MF by adding mfCount. */
-    void updateMFCnt(const MachineFunction &MF,unsigned  mfCount){
-      functionCounts[&MF] += mfCount;
-
+    /* Updates the per-function total count for the provided Func by adding mfCount. */
+    void updateFuncCnt(const MachineFunction &MF,unsigned  mfCount){
+      functionCounts[&MF.getFunction()] += mfCount;
     }
 
     /*--------------------------------------------------------------------------*/
     /* Updates the per-basic-block total count for (MF, MBB) by adding bbCount. */
     void updateBBCnt(const MachineFunction &MF,const MachineBasicBlock &MBB,unsigned bbCount){
-      basicBlocksCounts[&MF][&MBB] += bbCount;
-
-      }
+      basicBlocksCounts[&MF.getFunction()][&MBB] += bbCount;
+    }
 
     /*--------------------------------------------------------------------------*/
     /* Increments the opcode/flavor counter for (MF, MBB, OpKey) by 1. */
     void updateBBFlavCnt(const MachineFunction &MF,const MachineBasicBlock &MBB, std::string OpKey){
-      basicBlocksFlavourCounts[&MF][&MBB][OpKey]++;
-
-      }
+      basicBlocksFlavourCounts[&MF.getFunction()][&MBB][OpKey]++;
+    }
 
     /*--------------------------------------------------------------------------*/
     /* Serializes the entire structure to JSON in the following high-level shape:
@@ -137,7 +138,7 @@ namespace llvm {
          driver for which functions appear in JSON and in what BB order. */
       for (const auto &FO : basicBlockOrder) {
         /* Extract function pointer (key) and its BB iteration order list. */
-        const MachineFunction *MF = FO.first;
+        const Function *MF = FO.first;
         const auto &Order = FO.second;
 
         /* Determine the function name string for JSON keying. */
@@ -216,7 +217,4 @@ namespace llvm {
       return llvm::json::Value(std::move(Root));
     }
   };
-
-
-
 }
