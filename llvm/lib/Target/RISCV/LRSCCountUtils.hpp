@@ -1,6 +1,5 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/IR/Function.h"
 #include "llvm/Support/JSON.h"
 
 #include <string>
@@ -19,12 +18,11 @@ namespace utils {
 
     /*--------------------------------------------------------------------------*/
     /* Key types used for hash maps.
-       - FKey: identifies a function (by pointer identity)
+       - MFKey: identifies a function (by pointer identity)
        - BBKey: identifies a basic block (by pointer identity)
        - OpKey: identifies an opcode/flavor label (string) */
-    // Using llvm::Function as opposed to MachineFunction as we can always
-    // get the machine function from Function.
-    using FKey = const Function *;
+
+    using MFKey = const MachineFunction *;
     using BBKey = const MachineBasicBlock *;
     using OpKey = std::string;
 
@@ -35,7 +33,7 @@ namespace utils {
 
     /*--------------------------------------------------------------------------*/
     /* FuncToBBListMap: maps each function to its BB iteration order list. */
-    using FuncToBBListMap = std::unordered_map<FKey, BBList>;
+    using FuncToBBListMap = std::unordered_map<MFKey, BBList>;
 
     /*--------------------------------------------------------------------------*/
     /* MF -> list of BB pointers in Func iteration order */
@@ -51,7 +49,7 @@ namespace utils {
 
     /*--------------------------------------------------------------------------*/
     /* FuncToBBFlavourMap: Func -> (BB -> (opcode/flavor -> count)). */
-    using FuncToBBFlavourMap = std::unordered_map<FKey, BBToFlavourMap>;
+    using FuncToBBFlavourMap = std::unordered_map<MFKey, BBToFlavourMap>;
 
     /*--------------------------------------------------------------------------*/
     /* BBCountMap: BB -> total LR/SC count in that BB (definition-dependent). */
@@ -59,11 +57,11 @@ namespace utils {
 
     /*--------------------------------------------------------------------------*/
     /* FuncToBBCountMap: Func -> (BB -> total LR/SC count). */
-    using FuncToBBCountMap = std::unordered_map<FKey, BBCountMap>;
+    using FuncToBBCountMap = std::unordered_map<MFKey, BBCountMap>;
 
     /*--------------------------------------------------------------------------*/
     /* FuncCountMap: Func -> total LR/SC count for the function. */
-    using FuncCountMap = std::unordered_map<FKey, int>;
+    using FuncCountMap = std::unordered_map<MFKey, int>;
 
     /*--------------------------------------------------------------------------*/
     /* Func -> BB -> (opcode -> count)
@@ -93,19 +91,19 @@ namespace utils {
     /*--------------------------------------------------------------------------*/
     /* Updates the per-function total count for the provided Func by adding mfCount. */
     void updateFuncCnt(const MachineFunction &MF,unsigned  mfCount){
-      functionCounts[&MF.getFunction()] += mfCount;
+      functionCounts[&MF] += mfCount;
     }
 
     /*--------------------------------------------------------------------------*/
     /* Updates the per-basic-block total count for (MF, MBB) by adding bbCount. */
     void updateBBCnt(const MachineFunction &MF,const MachineBasicBlock &MBB,unsigned bbCount){
-      basicBlocksCounts[&MF.getFunction()][&MBB] += bbCount;
+      basicBlocksCounts[&MF][&MBB] += bbCount;
     }
 
     /*--------------------------------------------------------------------------*/
     /* Increments the opcode/flavor counter for (MF, MBB, OpKey) by 1. */
     void updateBBFlavCnt(const MachineFunction &MF,const MachineBasicBlock &MBB, std::string OpKey){
-      basicBlocksFlavourCounts[&MF.getFunction()][&MBB][OpKey]++;
+      basicBlocksFlavourCounts[&MF][&MBB][OpKey]++;
     }
 
     /*--------------------------------------------------------------------------*/
@@ -138,7 +136,7 @@ namespace utils {
          driver for which functions appear in JSON and in what BB order. */
       for (const auto &FO : basicBlockOrder) {
         /* Extract function pointer (key) and its BB iteration order list. */
-        const Function *MF = FO.first;
+        const MachineFunction *MF = FO.first;
         const auto &Order = FO.second;
 
         /* Determine the function name string for JSON keying. */
@@ -172,6 +170,17 @@ namespace utils {
           /* LLVM internal BB number, or -1 if MBB is null. */
           BBObj["mbb_number"] =
               MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
+
+          // lambda function to calculate MBB size in insn count
+          auto getMBBSize = [](const MachineBasicBlock *MBB) {
+            unsigned cnt = 0;
+            for (auto &MI : *MBB) {
+              cnt++;
+            }
+            return cnt;
+          };
+
+          BBObj["num_insn"] = getMBBSize(MBB); 
 
           /* Look up BB total for this MF and BB, defaulting to 0 if absent. */
           int BBTotal = 0;

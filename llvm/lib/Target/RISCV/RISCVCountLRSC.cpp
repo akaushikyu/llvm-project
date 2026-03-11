@@ -17,6 +17,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
 #include "RISCV.h"
@@ -31,11 +32,10 @@ using namespace llvm;
 #define DEBUG_TYPE "riscvcntlrsc"
 
 static cl::opt<bool> RISCVCountLRSCEmitJSON(
-    "dump-insn-stats-json",
+    "dump-insn-stats-json", cl::Hidden,
     cl::desc(
-        "The JSON Emission Control is used for controlling JSON format emission. Affects  "),
+        "The JSON Emission Control is used for controlling JSON format emission. "),
     cl::init(false));
-
 
 namespace {
 
@@ -47,13 +47,12 @@ public:
   static char ID;
 
   RISCVCountLRSC() : MachineFunctionPass(ID) {}
-  ~RISCVCountLRSC();
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
   StringRef getPassName() const override { return RISCV_COUNT_LR_SC_NAME; }
 
-  void print(raw_ostream &OS) const;
+  void dumpStats(raw_ostream &OS, MachineFunction &MF) const;
 
 private:
   /* Struct defined in LRSCCountUtils.hpp. */
@@ -99,8 +98,6 @@ char RISCVCountLRSC::ID = 0;
 INITIALIZE_PASS(RISCVCountLRSC, "riscv-count-lr-sc", RISCV_COUNT_LR_SC_NAME,
                 false, false)
 
-RISCVCountLRSC::~RISCVCountLRSC() { print(dbgs()); }
-
 FunctionPass *llvm::createRISCVCountLRSCPass() { return new RISCVCountLRSC(); }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
@@ -109,7 +106,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
    */
-  auto &F = MF.getFunction();
+  auto &F = MF;
 
   Counts.basicBlockOrder[&F] = std::vector<const MachineBasicBlock*>(0, nullptr);
 
@@ -170,6 +167,8 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   /* Update the Func -> count mapping with the LR/SC count for this function. */
   Counts.updateFuncCnt(MF, insnPerMFCnt);
 
+  dumpStats(dbgs(), MF);
+
   /* This pass is read-only and does not modify the MachineFunction, so
    * return false.
    */
@@ -224,11 +223,16 @@ RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
   return total;
 }
 
-void RISCVCountLRSC::print(raw_ostream &OS) const {
+void RISCVCountLRSC::dumpStats(raw_ostream &OS, MachineFunction& MF) const {
   if (RISCVCountLRSCEmitJSON) {
-    llvm::json::Value J = Counts.toJSON();
-    OS << llvm::formatv("{0:2}", J) << "\n";
-    return;
+      std::string fName =  MF.getName().str() + ".lrscStats.json";
+      int FD;
+      std::error_code EC = sys::fs::openFileForWrite(
+        fName, FD, sys::fs::CD_CreateAlways, sys::fs::OF_Text);
+      raw_fd_ostream OS(FD, /*shouldClose=*/ true);
+      llvm::json::Value J = Counts.toJSON();
+      OS << llvm::formatv("{0:2}", J) << "\n";
+      return;
   }
 
   OS << "Number of LR/SC instruction: " << totalCount << "\n";
