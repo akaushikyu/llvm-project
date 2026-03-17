@@ -17,6 +17,8 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
@@ -41,29 +43,31 @@ namespace {
 
 class RISCVCountLRSC : public MachineFunctionPass {
 public:
-  const RISCVSubtarget *STI;
-  const RISCVInstrInfo *TII;
 
   static char ID;
 
+  static std::string ModuleName;
+
   RISCVCountLRSC() : MachineFunctionPass(ID) {}
+  ~RISCVCountLRSC();
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
   StringRef getPassName() const override { return RISCV_COUNT_LR_SC_NAME; }
 
-  void dumpStats(raw_ostream &OS, MachineFunction &MF) const;
+  void updateStats(MachineFunction &MF);
+  void dumpJSONStats(raw_ostream &OS);
 
 private:
-  /* Struct defined in LRSCCountUtils.hpp. */
-  utils::LRSCCounts Counts;
 
   /* Added MachineFunction &MF as a parameter so LR/SC counts can be
    * attributed to the containing function.
    */
-  unsigned countLRSC(MachineBasicBlock &MBB,
-                     MachineFunction &MF);
+  unsigned countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB);
   unsigned totalCount = 0;
+
+  /* Struct defined in LRSCCountUtils.hpp. */
+  utils::LRSCCounts Counts;
 };
 
 } // end anonymous namespace
@@ -94,34 +98,38 @@ std::string stringifyOpcode(uint16_t opc){
     return "";
   }
 }
+
 char RISCVCountLRSC::ID = 0;
+std::string RISCVCountLRSC::ModuleName = "";
+
 INITIALIZE_PASS(RISCVCountLRSC, "riscv-count-lr-sc", RISCV_COUNT_LR_SC_NAME,
                 false, false)
 
 FunctionPass *llvm::createRISCVCountLRSCPass() { return new RISCVCountLRSC(); }
 
+RISCVCountLRSC::~RISCVCountLRSC() {
+  if (RISCVCountLRSCEmitJSON) {
+    dumpJSONStats(dbgs());
+  }
+}
+
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
+
   llvm::errs() << "RISCVCountLRSC: " << MF.getName() << "\n";
 
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
    */
-  auto &F = MF;
 
-  Counts.basicBlockOrder[&F] = std::vector<const MachineBasicBlock*>(0, nullptr);
+  llvm::Module* m = MF.getFunction().getParent();
+  RISCVCountLRSC::ModuleName = m->getModuleIdentifier();
+
+  Counts.basicBlockOrder = std::vector<const MachineBasicBlock*>(0, nullptr);
 
   /* Alias the per-function basic block order vector
    * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
    */
-  auto &Order =
-      Counts.basicBlockOrder[&F];
-
-  /* Subtarget instruction CPU features: extensions, scheduling model, etc. */
-  STI =
-      &MF.getSubtarget<RISCVSubtarget>();
-
-  /* Instruction info table: opcodes, pseudo expansion info, etc. */
-  TII = STI->getInstrInfo();
+  auto &Order = Counts.basicBlockOrder;
 
   unsigned insnPerBBCnt = 0;
   unsigned insnPerMFCnt = 0;
@@ -133,25 +141,28 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
    */
   for (auto &MBB : MF) {
 
+    // skip unreachable blocks
+    if (MBB.getNumber() == -1) {
+      continue;
+    }
+
     /* Record this basic block pointer in traversal order so JSON can emit all
      * basic blocks (including zero-count ones) with a stable bb_index.
      */
-    Order.push_back(
-        &MBB);
+    Order.push_back(&MBB);
 
     /* Number of LR/SC instructions detected in this basic block. */
-    insnPerBBCnt = countLRSC(MBB, MF);
+    insnPerBBCnt = countLRSC(Counts, MBB);
 
     /* Ensure the MF -> BB entry exists even if this basic block has zero
      * LR/SC instructions.
      */
-    Counts.basicBlocksCounts[&F].try_emplace(
-        &MBB, 0);
+    Counts.BBCount.try_emplace(&MBB, 0);
 
     /* Update the MF -> BB -> count mapping with the LR/SC count for this
      * basic block.
      */
-    Counts.updateBBCnt(MF, MBB, insnPerBBCnt);
+    Counts.updateBBCnt(MBB, insnPerBBCnt);
 
     /* Accumulate the LR/SC count for this basic block into the total for this
      * function.
@@ -165,9 +176,9 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   totalCount += insnPerMFCnt;
 
   /* Update the Func -> count mapping with the LR/SC count for this function. */
-  Counts.updateFuncCnt(MF, insnPerMFCnt);
+  Counts.updateFuncCnt(insnPerMFCnt);
 
-  dumpStats(dbgs(), MF);
+  updateStats(MF);
 
   /* This pass is read-only and does not modify the MachineFunction, so
    * return false.
@@ -176,8 +187,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 }
 
 unsigned
-RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
-                          MachineFunction &MF) {
+RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
@@ -210,7 +220,7 @@ RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
       case RISCV::SC_W_RL:
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
-        Counts.updateBBFlavCnt(MF, MBB, stringifyOpcode(opc));
+        Counts.updateBBFlavCnt(MBB, stringifyOpcode(opc));
         total++;
         break;
 
@@ -223,18 +233,22 @@ RISCVCountLRSC::countLRSC(MachineBasicBlock &MBB,
   return total;
 }
 
-void RISCVCountLRSC::dumpStats(raw_ostream &OS, MachineFunction& MF) const {
+void RISCVCountLRSC::dumpJSONStats(raw_ostream &OS) {
   if (RISCVCountLRSCEmitJSON) {
-      std::string fName =  MF.getName().str() + ".lrscStats.json";
-      int FD;
-      std::error_code EC = sys::fs::openFileForWrite(
+    std::string fName =  RISCVCountLRSC::ModuleName + ".lrscStats.json";
+    int FD;
+    std::error_code EC = sys::fs::openFileForWrite(
         fName, FD, sys::fs::CD_CreateAlways, sys::fs::OF_Text);
-      raw_fd_ostream OS(FD, /*shouldClose=*/ true);
-      llvm::json::Value J = Counts.toJSON();
-      OS << llvm::formatv("{0:2}", J) << "\n";
-      return;
+    raw_fd_ostream OS(FD, /*shouldClose=*/ true);
+    OS << llvm::formatv("{0:2}", Counts.getJSONObj()) << "\n";
   }
+  return;
+}
 
-  OS << "Number of LR/SC instruction: " << totalCount << "\n";
+void RISCVCountLRSC::updateStats(MachineFunction& MF) {
+  if (RISCVCountLRSCEmitJSON) {
+    Counts.toJSON(MF);
+    return;
+  }
 }
 
