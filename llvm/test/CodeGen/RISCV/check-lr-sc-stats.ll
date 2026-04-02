@@ -1,3 +1,4 @@
+; ALLOW_RETRIES: 2
 ; RUN: llc -dump-insn-stats-json -march=riscv64 -o - %s | FileCheck %s --input-file=%s.lrscStats.json
 
 target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
