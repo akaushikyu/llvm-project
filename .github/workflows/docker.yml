@@ -1,0 +1,11 @@
+name: llvm-yu CI 
+
+on: [push, pull_request]
+
+jobs:
+  build-docker:
+    runs-on: self-hosted 
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build env image
+      run: docker build --target=env --tag project:build -f ci/docker/ubuntu/Dockerfile . 
