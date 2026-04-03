@@ -8,4 +8,4 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build env image
-      run: docker build --target=env --tag project:build -f ci/docker/ubuntu/Dockerfile . 
+      run: docker build -t project:build-verify -f ci/docker/ubuntu/Dockerfile . 
