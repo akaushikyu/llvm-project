@@ -1,14 +1,25 @@
-name: llvm-yu CI 
-
+name: Docker Build CI
 on: [push, pull_request]
 
 jobs:
-  build_and_publish:
-    runs-on: self-hosted 
-    steps: 
-      - uses: actions/checkout@v3
-      - name: Build and push the built image
-        run : |
-          docker login --username akaushikyu --password ${{ secrets.GH_PAT }} ghcr.io
-          docker build . --tag ghcr.io/akaushikyu/llvm-project:latest
-          docker push ghcr.io/akaushikyu/llvm-project:latest
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Check out the code from your repo onto the GitHub Runner
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step 2: Set up Docker Buildx (provides advanced build features)
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Step 3: Build the Docker image
+    - name: Build Docker image
+      run: |
+        docker build -t llvm-project:v1 .
+
+    # Step 4: Verify the build (optional)
+    - name: Run a quick test inside the container
+      run: |
+        ls /llvm-project
