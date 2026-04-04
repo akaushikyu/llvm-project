@@ -3,12 +3,12 @@ name: llvm-yu CI
 on: [push, pull_request]
 
 jobs:
-  build_verify:
+  build_and_publish:
     runs-on: self-hosted 
-    container: 
-      image: ghcr.io/akaushikyu/llvm-project:latest
-      options: --user root
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build env image
-      run: cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="lld;clang" -DLLVM_TARGETS_TO_BUILD=RISCV -DCMAKE_INSTALL_PREFIX=/opt/riscv-llvm -DLLVM_DEFAULT_TARGET_TRIPLE="riscv64-unknown-elf" -DDEFAULT_SYSROOT=/sysroot-deb-riscv64-unstable -S llvm -B riscv-build
+    steps: 
+      - uses: actions/checkout@v3
+      - name: Build and push the image
+        run : |
+          docker login --username akaushikyu --password ${{ secrets.GH_PAT }} ghcr.io
+          docker build . --tag ghcr.io/akaushikyu/llvm-project:latest
+          docker push ghcr.io/akaushikyu/llvm-project:latest
