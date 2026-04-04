@@ -21,6 +21,8 @@ rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 CMD [ "/bin/bash" ]
 
+COPY . .
+
 #RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
 #RUN git clone https://github.com/akaushikyu/llvm-workloads
 
