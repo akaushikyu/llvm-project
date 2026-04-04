@@ -22,4 +22,4 @@ jobs:
     # Step 4: Verify the build (optional)
     - name: Run a quick test inside the container
       run: |
-        ls /llvm-project
+        ls llvm-project

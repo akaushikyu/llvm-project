@@ -15,15 +15,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # see: https://repology.org/project/cmake/versions
 ENV PATH=/usr/local/bin:$PATH
 RUN apt-get update -q && \
-apt-get install -yq git build-essential cmake llvm clang qemu-user-static binfmt-support wget debootstrap && \
+apt-get install -yq build-essential cmake llvm clang qemu-user-static binfmt-support wget debootstrap && \
 apt-get clean && \
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 CMD [ "/bin/bash" ]
 
 RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
-RUN git clone https://github.com/akaushikyu/llvm-project && \
-git clone https://github.com/akaushikyu/llvm-workloads
+#COPY /home/kaushika/Software/github-action-runners/actions-runner/_work/llvm-project /llvm-project2/
+
+#RUN git clone https://github.com/akaushikyu/llvm-project && \
+#git clone https://github.com/akaushikyu/llvm-workloads
 
 WORKDIR /llvm-project
 
