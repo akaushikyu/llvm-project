@@ -21,6 +21,10 @@ rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 CMD [ "/bin/bash" ]
 
+RUN mkdir llvm-project-workspace
+
+WORKDIR /llvm-project-workspace
+
 COPY . .
 
 #RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
