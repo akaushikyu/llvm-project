@@ -7,7 +7,7 @@ jobs:
     runs-on: self-hosted 
     steps: 
       - uses: actions/checkout@v3
-      - name: Build and push the image
+      - name: Build and push the built image
         run : |
           docker login --username akaushikyu --password ${{ secrets.GH_PAT }} ghcr.io
           docker build . --tag ghcr.io/akaushikyu/llvm-project:latest
