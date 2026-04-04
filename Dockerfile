@@ -21,19 +21,13 @@ rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 CMD [ "/bin/bash" ]
 
+RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
+RUN git clone https://github.com/akaushikyu/llvm-workloads
+
 RUN mkdir llvm-project-workspace
-
 WORKDIR /llvm-project-workspace
-
 COPY . .
-
-#RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
-#RUN git clone https://github.com/akaushikyu/llvm-workloads
-
-#WORKDIR /llvm-project
-
-#RUN git checkout ak-lit-test-setup
-#RUN cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="lld;clang" -DLLVM_TARGETS_TO_BUILD=RISCV -DCMAKE_INSTALL_PREFIX=/opt/riscv-llvm -DLLVM_DEFAULT_TARGET_TRIPLE="riscv64-unknown-elf" -DDEFAULT_SYSROOT=/sysroot-deb-riscv64-unstable -S llvm -B riscv-build
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="lld;clang" -DLLVM_TARGETS_TO_BUILD=RISCV -DCMAKE_INSTALL_PREFIX=/opt/riscv-llvm -DLLVM_DEFAULT_TARGET_TRIPLE="riscv64-unknown-elf" -DDEFAULT_SYSROOT=/sysroot-deb-riscv64-unstable -S llvm -B riscv-build
 
 #WORKDIR /llvm-project/riscv-build
 #RUN make -j8 && make install
