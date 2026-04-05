@@ -29,12 +29,12 @@ WORKDIR /llvm-project-workspace
 COPY . .
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="lld;clang" -DLLVM_TARGETS_TO_BUILD=RISCV -DCMAKE_INSTALL_PREFIX=/opt/riscv-llvm -DLLVM_DEFAULT_TARGET_TRIPLE="riscv64-unknown-elf" -DDEFAULT_SYSROOT=/sysroot-deb-riscv64-unstable -S llvm -B riscv-build
 
-#WORKDIR /llvm-project/riscv-build
-#RUN make -j8 && make install
+WORKDIR /llvm-project-workspace/riscv-build
+RUN make -j8 && make install
 
 ## Run LIT tests
 #WORKDIR /llvm-project
-#RUN /llvm-project/riscv-build/bin/llvm-lit -v /llvm-project/llvm/test/CodeGen/RISCV/check-lr-sc-stats.ll
+RUN ./bin/llvm-lit -v /llvm-project-workspace/llvm/test/CodeGen/RISCV
 
 # Run on one llvm-workload
 #WORKDIR /llvm-workloads/tests/bitcodes/
