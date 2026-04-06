@@ -10,6 +10,11 @@
 // should run just before code generation.
 //
 //===----------------------------------------------------------------------===//
+
+#define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
+#define DEBUG_TYPE "riscvcntlrsc"
+
+
 #include "LRSCCountUtils.hpp"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -33,8 +38,7 @@
 #include <algorithm>
 
 using namespace llvm;
-#define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
-#define DEBUG_TYPE "riscvcntlrsc"
+using namespace utils;
 
 static cl::opt<bool> RISCVCountLRSCEmitJSON(
     "dump-insn-stats-json", cl::Hidden,
@@ -71,7 +75,7 @@ private:
 
   /* Struct defined in LRSCCountUtils.hpp. */
   utils::LRSCCounts Counts;
-  utils::LRSCDistanceAndCycle DistanceAndCycle;
+  utils::LRSCAnalyzer DistanceAndCycle;
 };
 
 } // end anonymous namespace
@@ -94,7 +98,7 @@ RISCVCountLRSC::~RISCVCountLRSC() {
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 
-  llvm::errs() << "RISCVCountLRSC: " << MF.getName() << "\n";
+  LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
 
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
@@ -150,8 +154,8 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     insnPerMFCnt += insnPerBBCnt;
   }
   
-  DistanceAndCycle.computeLRSCDistancesAndCycles(MF);
-  DistanceAndCycle.dump(DistanceAndCycle.result);
+  utils::MatchResult result = DistanceAndCycle.computeLRSCDistancesAndCycles(MF);
+  lrsc::dump(result);
 
   /* Accumulate the per-function LR/SC count into the total for the entire
    * compilation unit.
@@ -203,7 +207,7 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
       case RISCV::SC_W_RL:
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
-        Counts.updateBBFlavCnt(MBB, DistanceAndCycle.stringifyOpcode(opc));
+        Counts.updateBBFlavCnt(MBB, lrsc::stringifyOpcode(opc));
         total++;
         break;
 
