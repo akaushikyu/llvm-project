@@ -19,10 +19,16 @@ apt-get install -yq git build-essential cmake llvm clang qemu-user-static binfmt
 apt-get clean && \
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+RUN "Setup image apt install: DONE" >> /progress-log.txt
+
 CMD [ "/bin/bash" ]
+
+WORKDIR /
 
 RUN debootstrap --arch=riscv64 --variant=minbase --include=build-essential,symlinks unstable sysroot-deb-riscv64-unstable
 RUN git clone https://github.com/akaushikyu/llvm-workloads
+
+RUN "Setup sysroot and git clone repos: DONE" >> /progress-log.txt
 
 RUN mkdir llvm-project-workspace
 WORKDIR /llvm-project-workspace
@@ -32,14 +38,19 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="lld;clang" -DLLVM_T
 WORKDIR /llvm-project-workspace/riscv-build
 RUN make -j8 && make install
 
+RUN "Build LLVM: DONE" >> /progress-log.txt
+
 ## Run LIT tests
 #WORKDIR /llvm-project
 RUN ./bin/llvm-lit -v --ignore-fail /llvm-project-workspace/llvm/test/CodeGen/RISCV
 
-# Run on one llvm-workload
-#WORKDIR /llvm-workloads/tests/bitcodes/
-#RUN /opt/riscv-llvm/bin/llvm-ar x libc.bca
-#RUN /opt/riscv-llvm/bin/llc -dump-insn-stats-json -march=riscv64 .rand.cpp.o.bc -o llc-output.rand.cpp.o.bc.s
+RUN "LLVM LIT testing: DONE" >> /progress-log.txt
 
-# cat the output file
-#RUN cat llc-output.rand.cpp.o.bc.s
+# Run on one llvm-workload
+WORKDIR /llvm-workloads/tests/bitcodes/
+RUN /opt/riscv-llvm/bin/llvm-ar x libc.bca
+RUN python run.py /opt/riscv-llvm/bin
+
+RUN "LLVM BC testing: DONE" >> /progress-log.txt
+
+RUN "All good" >> /progrss-log.txt

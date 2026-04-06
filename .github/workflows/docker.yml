@@ -21,4 +21,4 @@ jobs:
     # Step 4: Verify the build (optional)
     - name: Run a quick test inside the container
       run: |
-        docker run --rm llvm-project:v1 ls .
+        docker run --rm llvm-project:v1 cat ./progress-log.txt
