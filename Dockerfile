@@ -49,8 +49,8 @@ RUN echo "LLVM LIT testing: DONE" >> /progress-log.txt
 # Run on one llvm-workload
 WORKDIR /llvm-workloads/tests/bitcodes/
 RUN /opt/riscv-llvm/bin/llvm-ar x libc.bca
-RUN python run.py /opt/riscv-llvm/bin
+RUN python3 run.py /opt/riscv-llvm/bin
 
 RUN echo "LLVM BC testing: DONE" >> /progress-log.txt
 
-RUN echo "All good" >> /progrss-log.txt
+RUN echo "All good" >> /progress-log.txt
