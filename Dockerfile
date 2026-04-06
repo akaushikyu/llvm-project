@@ -54,3 +54,5 @@ RUN python3 run.py /opt/riscv-llvm/bin
 RUN echo "LLVM BC testing: DONE" >> /progress-log.txt
 
 RUN echo "All good" >> /progress-log.txt
+
+WORKDIR /
