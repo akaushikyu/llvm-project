@@ -1,6 +1,6 @@
 # README for custom fork
 
-[![Build status](https://github.com/akaushikyu/llvm-project/actions/workflows/docker.yml/badge.svg)](https://github.com/akaushikyu/llvm-project/actions/workflows/docker.yml)
+[![Build status](https://github.com/akaushikyu/llvm-project/actions/workflows/docker.yml/badge.svg?event=push)](https://github.com/akaushikyu/llvm-project/actions/workflows/docker.yml)
 
 ## Installing RISC-V LLVM
 
