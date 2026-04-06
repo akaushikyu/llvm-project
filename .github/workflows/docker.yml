@@ -1,5 +1,5 @@
 name: Docker Build CI
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build-and-test:
@@ -18,7 +18,7 @@ jobs:
       run: |
         docker build -t llvm-project:v1 .
 
-    # Step 4: Verify the build (optional)
+    # Step 4: Verify the build and remove the container
     - name: Run a quick test inside the container
       run: |
         docker run --rm llvm-project:v1 cat progress-log.txt
