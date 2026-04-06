@@ -89,6 +89,12 @@ cmake  -S runtimes -B build-libc -G Ninja \
     -DCOMPILER_RT_DEFAULT_TARGET_TRIPLE=riscv64-unknown-linux-gnu
 ```
 
+## LIT tests and Github CI
+- Each push triggers a Github CI action that builds and verifies the build against the RISC-V LIT tests and bitcodes from the LLVM-bitcodes repository
+- The CI runs the build and verification in a docker container. For more details, refer the code changes in PR #7
+- Merging a pull request to main branch is permitted only when the CI returns success. If the CI fails, look at the logs and determine where the CI failed. 
+- Each pull request must have LIT tests as part of the commit. The LIT tests must be short and extensive. An example of LIT test can be found in `llvm/test/CodeGen/RISCV/check-lr-sc-stats.ll` 
+
 ## Things to keep in mind
 
 - A lot of time was spent in preparing `/usr/lib/riscv64-linux-gnu`. This directory must have the necessary C runtime startup files (`crt*.o`, `libgcc` etc.). One way is to create symlinks with the correct files in the sysroot directory. 
