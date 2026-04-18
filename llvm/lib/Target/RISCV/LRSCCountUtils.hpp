@@ -820,6 +820,7 @@ private:
 
       /* Check each two-hop successor of the current block for a back-edge into the current path. */
       for (MachineBasicBlock *succ2 : succ1->successors()) {
+        if (succ1 == succ2) continue;
         /* Retain succ2's block number as a string for logging and cycle path construction only. */
         std::string succ2Name = std::to_string(succ2->getNumber());
         /* Search the current path buffer for succ2 by pointer; a hit indicates a two-hop back-edge. */
