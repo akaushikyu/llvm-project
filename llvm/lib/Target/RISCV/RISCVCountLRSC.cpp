@@ -11,27 +11,34 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
+#define DEBUG_TYPE "riscvcntlrsc"
+
+
 #include "LRSCCountUtils.hpp"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/raw_ostream.h"
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVTargetMachine.h"
 #include <string>
-#include <unordered_map>
 #include <vector>
+#include <map>
+#include <unordered_map>
+#include <algorithm>
 
 using namespace llvm;
-#define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
-#define DEBUG_TYPE "riscvcntlrsc"
+using namespace utils;
 
 static cl::opt<bool> RISCVCountLRSCEmitJSON(
     "dump-insn-stats-json", cl::Hidden,
@@ -68,36 +75,12 @@ private:
 
   /* Struct defined in LRSCCountUtils.hpp. */
   utils::LRSCCounts Counts;
+  utils::LRSCAnalyzer DistanceAndCycle;
 };
 
 } // end anonymous namespace
 
-std::string stringifyOpcode(uint16_t opc){
-  switch (opc) {
-  // LR flavours
-  case RISCV::LR_W:      return "LR_W";
-  case RISCV::LR_D:      return "LR_D";
-  case RISCV::LR_D_AQ:   return "LR_D_AQ";
-  case RISCV::LR_W_AQ:   return "LR_W_AQ";
-  case RISCV::LR_D_RL:   return "LR_D_RL";
-  case RISCV::LR_W_RL:   return "LR_W_RL";
-  case RISCV::LR_D_AQRL: return "LR_D_AQRL";
-  case RISCV::LR_W_AQRL: return "LR_W_AQRL";
 
-  // SC flavours
-  case RISCV::SC_W:      return "SC_W";
-  case RISCV::SC_D:      return "SC_D";
-  case RISCV::SC_D_AQ:   return "SC_D_AQ";
-  case RISCV::SC_W_AQ:   return "SC_W_AQ";
-  case RISCV::SC_D_RL:   return "SC_D_RL";
-  case RISCV::SC_W_RL:   return "SC_W_RL";
-  case RISCV::SC_D_AQRL: return "SC_D_AQRL";
-  case RISCV::SC_W_AQRL: return "SC_W_AQRL";
-
-  default:
-    return "";
-  }
-}
 
 char RISCVCountLRSC::ID = 0;
 std::string RISCVCountLRSC::ModuleName = "";
@@ -115,7 +98,7 @@ RISCVCountLRSC::~RISCVCountLRSC() {
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 
-  llvm::errs() << "RISCVCountLRSC: " << MF.getName() << "\n";
+  LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
 
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
@@ -141,6 +124,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
    */
   for (auto &MBB : MF) {
 
+    
     // skip unreachable blocks
     if (MBB.getNumber() == -1) {
       continue;
@@ -169,6 +153,9 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
      */
     insnPerMFCnt += insnPerBBCnt;
   }
+  
+  utils::MatchResult result = DistanceAndCycle.computeLRSCDistancesAndCycles(MF);
+  lrsc::dump(result);
 
   /* Accumulate the per-function LR/SC count into the total for the entire
    * compilation unit.
@@ -220,7 +207,7 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
       case RISCV::SC_W_RL:
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
-        Counts.updateBBFlavCnt(MBB, stringifyOpcode(opc));
+        Counts.updateBBFlavCnt(MBB, lrsc::stringifyOpcode(opc));
         total++;
         break;
 
@@ -241,6 +228,7 @@ void RISCVCountLRSC::dumpJSONStats(raw_ostream &OS) {
         fName, FD, sys::fs::CD_CreateAlways, sys::fs::OF_Text);
     raw_fd_ostream OS(FD, /*shouldClose=*/ true);
     OS << llvm::formatv("{0:2}", Counts.getJSONObj()) << "\n";
+    
   }
   return;
 }
