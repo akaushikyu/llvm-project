@@ -1,3 +1,4 @@
+; UNSUPPORTED: true
 # RUN: not llvm-mc -triple=riscv32 --mattr=+experimental-zibi %s 2>&1 \
 # RUN:        | FileCheck %s --check-prefix=CHECK-ERROR
 # RUN: not llvm-mc -triple=riscv64 --mattr=+experimental-zibi %s 2>&1 \

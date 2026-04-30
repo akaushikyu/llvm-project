@@ -366,6 +366,7 @@ class BareSImm13Lsb0MaybeSym : Operand<OtherVT> {
   }];
 }
 
+
 // A 13-bit signed immediate where the least significant bit is zero. The ImmLeaf
 // is needed so that the CompressInstEmitter can correctly add checks for the
 // compress patterns that involve instructions that use this operand. Similar to
@@ -378,6 +379,28 @@ def bare_simm13_lsb0 : BareSImm13Lsb0MaybeSym,
   let DecoderMethod = "decodeSImmOperandAndLslN<13, 1>";
   let OperandType = "OPERAND_PCREL";
 }
+
+#ifdef BNERD_FEATURE_DISABLED
+#else
+class BareSImm8Lsb0 : Operand<OtherVT> {
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isShiftedInt<7, 1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+// a 7-bit signed immediate where the least significant bit is 0.
+// Used in BNERD instruction
+def bare_simm8_lsb0 :  BareSImm8Lsb0,
+                       ImmLeaf<XLenVT, [{return isShiftedInt<7, 1>(Imm);}]> {
+  let ParserMatchClass = BareSImmNLsb0AsmOperand<8>;
+  let PrintMethod = "printBranchOperand";
+  let EncoderMethod = "getImmOpValueAsrN<1>";
+  let DecoderMethod = "decodeSImmOperandAndLslN<8, 1>";
+  let OperandType = "OPERAND_PCREL";
+}
+#endif
 
 // We need this (sort of) duplicate definition since adding ImmLeaf to
 // bare_simm13_lsb0 above makes it not sit well with codegen patterns where it
@@ -642,6 +665,25 @@ class BranchCC_rri<bits<3> funct3, string opcodestr>
   let mayStore = 0;
 }
 
+#ifdef BNERD_FEATURE_DISABLED
+#else
+// BNERD: B-type branch with func3=0x3. Bits [30:27|7] of the standard B-type
+// immediate are repurposed as a 5-bit register field (rd). The remaining
+// offset bits [12|6:1] still carry the PC-relative branch target.
+class BranchCC_rrri<bits<3> funct3, string opcodestr>
+    : RVInstBNERD<funct3, OPC_BRANCH, (outs),
+              (ins GPR:$rs1, GPR:$rs2, GPR:$rd, bare_simm8_lsb0:$imm7),
+              opcodestr, "$rd, $rs1, $rs2, $imm7">,
+      Sched<[WriteJmp, ReadJmp, ReadJmp]> {
+  bits<5> rd;
+  let isBranch = 1;
+  let isTerminator = 1;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+}
+#endif
+
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
 class Load_ri<bits<3> funct3, string opcodestr, DAGOperand rty = GPR>
     : RVInstI<funct3, OPC_LOAD, (outs rty:$rd), (ins GPRMem:$rs1, simm12_lo:$imm12),
@@ -767,6 +809,11 @@ def BLT  : BranchCC_rri<0b100, "blt">;
 def BGE  : BranchCC_rri<0b101, "bge">;
 def BLTU : BranchCC_rri<0b110, "bltu">;
 def BGEU : BranchCC_rri<0b111, "bgeu">;
+
+#ifdef BNERD_FEATURE_DISABLED
+#else
+def BNERD: BranchCC_rrri<0b011, "bnerd">;
+#endif
 
 let IsSignExtendingOpW = 1, canFoldAsLoad = 1, isReMaterializable = 1 in {
 def LB  : Load_ri<0b000, "lb">, Sched<[WriteLDB, ReadMemBase]>;
@@ -2331,7 +2378,9 @@ include "RISCVInstrInfoZimop.td"
 include "RISCVInstrInfoZicbo.td"
 include "RISCVInstrInfoZicond.td"
 include "RISCVInstrInfoZilsd.td"
+#ifdef BNERD_FEATURE_DISABLED
 include "RISCVInstrInfoZibi.td"
+#endif
 
 // Scalar FP
 include "RISCVInstrInfoF.td"

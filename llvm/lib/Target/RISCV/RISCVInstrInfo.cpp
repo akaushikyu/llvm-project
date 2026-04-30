@@ -1045,7 +1045,9 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   default:
     return RISCVCC::COND_INVALID;
   case RISCV::BEQ:
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
+#endif
   case RISCV::CV_BEQIMM:
   case RISCV::QC_BEQI:
   case RISCV::QC_E_BEQI:
@@ -1053,7 +1055,11 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   case RISCV::NDS_BEQC:
     return RISCVCC::COND_EQ;
   case RISCV::BNE:
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::BNEI:
+#else
+  case RISCV::BNERD:
+#endif
   case RISCV::QC_BNEI:
   case RISCV::QC_E_BNEI:
   case RISCV::CV_BNEIMM:
@@ -1107,6 +1113,17 @@ static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
   // Block ends with fall-through condbranch.
   assert(LastInst.getDesc().isConditionalBranch() &&
          "Unknown conditional branch");
+#ifdef BNERD_FEATURE_DISABLED
+#else
+  if (LastInst.getOpcode() == RISCV::BNERD) {
+    Target = LastInst.getOperand(3).getMBB();
+    Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
+    Cond.push_back(LastInst.getOperand(0));  // rs1
+    Cond.push_back(LastInst.getOperand(1));  // rs2
+    // operand 2 (rd) is not part of the condition and it's the embedded reg
+    return;
+  }
+#endif
   Target = LastInst.getOperand(2).getMBB();
   Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
   Cond.push_back(LastInst.getOperand(0));
@@ -1164,6 +1181,7 @@ unsigned RISCVCC::getBrCond(RISCVCC::CondCode CC, unsigned SelectOpc) {
       return RISCV::BGEU;
     }
     break;
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::Select_GPR_Using_CC_Imm5_Zibi:
     switch (CC) {
     default:
@@ -1174,6 +1192,7 @@ unsigned RISCVCC::getBrCond(RISCVCC::CondCode CC, unsigned SelectOpc) {
       return RISCV::BNEI;
     }
     break;
+#endif
   case RISCV::Select_GPR_Using_CC_SImm5_CV:
     switch (CC) {
     default:
@@ -1498,15 +1517,23 @@ bool RISCVInstrInfo::reverseBranchCondition(
   case RISCV::BEQ:
     Cond[0].setImm(RISCV::BNE);
     break;
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
     Cond[0].setImm(RISCV::BNEI);
     break;
+#endif
   case RISCV::BNE:
     Cond[0].setImm(RISCV::BEQ);
     break;
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::BNEI:
     Cond[0].setImm(RISCV::BEQI);
     break;
+#else
+  case RISCV::BNERD:
+    // BNERD has no inverse form
+    return true;  // returning true shows "unable to reverse"
+#endif
   case RISCV::BLT:
     Cond[0].setImm(RISCV::BGE);
     break;
@@ -1750,14 +1777,19 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   case RISCV::NDS_BEQC:
   case RISCV::NDS_BNEC:
     return isInt<11>(BrOffset);
+#ifdef BNERD_FEATURE_DISABLED
+  case RISCV::BEQI:
+  case RISCV::BNEI:
+#else
+  case RISCV::BNERD:
+    return isInt<8>(BrOffset);
+#endif
   case RISCV::BEQ:
   case RISCV::BNE:
   case RISCV::BLT:
   case RISCV::BGE:
   case RISCV::BLTU:
   case RISCV::BGEU:
-  case RISCV::BEQI:
-  case RISCV::BNEI:
   case RISCV::CV_BEQIMM:
   case RISCV::CV_BNEIMM:
   case RISCV::QC_BEQI:

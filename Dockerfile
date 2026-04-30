@@ -43,6 +43,8 @@ RUN echo "Build LLVM: DONE" >> /progress-log.txt
 ## Run LIT tests
 #WORKDIR /llvm-project
 RUN ./bin/llvm-lit -v --ignore-fail /llvm-project-workspace/llvm/test/CodeGen/RISCV
+RUN ./bin/llvm-lit -v --ignore-fail /llvm-project-workspace/llvm/test/MC/RISCV
+RUN ./bin/llvm-lit -v --ignore-fail /llvm-project-workspace/llvm/test/MC/Disassembler/RISCV
 
 RUN echo "LLVM LIT testing: DONE" >> /progress-log.txt
 
