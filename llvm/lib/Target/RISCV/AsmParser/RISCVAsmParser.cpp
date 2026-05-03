@@ -943,10 +943,12 @@ public:
     return isUImmPred([](int64_t Imm) { return 4 == Imm; });
   }
 
+#ifdef BNERD_FEATURE_DISABLE
   bool isImm5Zibi() const {
     return isUImmPred(
         [](int64_t Imm) { return (Imm != 0 && isUInt<5>(Imm)) || Imm == -1; });
   }
+#endif
 
   bool isSImm5Plus1() const {
     return isSImmPred(
@@ -1556,6 +1558,13 @@ bool RISCVAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -(1 << 8), (1 << 8) - 2,
         "immediate must be a multiple of 2 bytes in the range");
+#if BNERD_FEATURE_DISABLED
+#else
+  case Match_InvalidBareSImm8Lsb0:
+    return generateImmOutOfRangeError(
+        Operands, ErrorInfo, -(1 << 7), (1 << 7) - 2,
+        "immediate must be a multiple of 2 bytes in the range");
+#endif
   case Match_InvalidUImm9Lsb000:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, 0, (1 << 9) - 8,
@@ -1650,10 +1659,12 @@ bool RISCVAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                       "operand must be a valid system register "
                                       "name or an integer in the range");
   }
+#ifdef BNERD_FEATURE_DISABLED
   case Match_InvalidImm5Zibi:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -1, (1 << 5) - 1,
         "immediate must be non-zero in the range");
+#endif
   case Match_InvalidVTypeI: {
     SMLoc ErrorLoc = ((RISCVOperand &)*Operands[ErrorInfo]).getStartLoc();
     return generateVTypeError(ErrorLoc);

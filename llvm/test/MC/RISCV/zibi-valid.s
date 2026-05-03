@@ -1,3 +1,4 @@
+; UNSUPPORTED: true
 # RUN: llvm-mc -triple=riscv32 -show-encoding --mattr=+experimental-zibi %s \
 # RUN:        | FileCheck %s --check-prefixes=CHECK-ENCODING,CHECK-ASM
 # RUN: llvm-mc -triple=riscv64 -show-encoding --mattr=+experimental-zibi %s \

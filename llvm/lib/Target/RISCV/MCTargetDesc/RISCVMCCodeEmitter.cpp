@@ -97,9 +97,11 @@ public:
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
 
+#ifdef BNERD_FEATURE_DISABLED
   uint64_t getImmOpValueZibi(const MCInst &MI, unsigned OpNo,
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
+#endif
 
   uint64_t getImmOpValue(const MCInst &MI, unsigned OpNo,
                          SmallVectorImpl<MCFixup> &Fixups,
@@ -563,6 +565,7 @@ RISCVMCCodeEmitter::getImmOpValueAsrN(const MCInst &MI, unsigned OpNo,
   return getImmOpValue(MI, OpNo, Fixups, STI);
 }
 
+#ifdef BNERD_FEATURE_DISABLED
 uint64_t
 RISCVMCCodeEmitter::getImmOpValueZibi(const MCInst &MI, unsigned OpNo,
                                       SmallVectorImpl<MCFixup> &Fixups,
@@ -575,6 +578,7 @@ RISCVMCCodeEmitter::getImmOpValueZibi(const MCInst &MI, unsigned OpNo,
 
   return Res;
 }
+#endif
 
 uint64_t RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
                                            SmallVectorImpl<MCFixup> &Fixups,

@@ -1,0 +1,12 @@
+# RUN: llvm-mc --disassemble %s -triple=riscv32 2>&1 | FileCheck %s
+# RUN: llvm-mc --disassemble %s -triple=riscv64 2>&1 | FileCheck %s
+[0x63,0x34,0x5f,0x38] 
+# CHECK: bnerd t2, t5, t0, 8
+[0x63,0x3f,0x5f,0xbe]
+# CHECK: bnerd t2, t5, t0, -2
+[0x63,0xb0,0xcf,0x29]
+# CHECK: bnerd t0, t6, t3, 0
+[0x63,0xbf,0xcf,0x2f]
+# CHECK: bnerd t0, t6, t3, 126
+[0x63,0xb0,0xcf,0xb1]
+# CHECK: bnerd t1, t6, t3, -128

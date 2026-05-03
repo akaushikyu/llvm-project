@@ -23349,7 +23349,9 @@ RISCVTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
            "ReadCounterWide is only to be used on riscv32");
     return emitReadCounterWidePseudo(MI, BB);
   case RISCV::Select_GPR_Using_CC_GPR:
+#ifdef BNERD_FEATURE_DISABLED
   case RISCV::Select_GPR_Using_CC_Imm5_Zibi:
+#endif
   case RISCV::Select_GPR_Using_CC_SImm5_CV:
   case RISCV::Select_GPRNoX0_Using_CC_SImm5NonZero_QC:
   case RISCV::Select_GPRNoX0_Using_CC_UImm5NonZero_QC:
