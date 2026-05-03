@@ -523,6 +523,26 @@ class RVInstB<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
 #ifdef BNERD_FEATURE_DISABLED
 #else
 // B-type with rd field stealing imm[11:7].
+class RVInstBEQRD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
+              string opcodestr, string argstr>
+    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
+  bits<7> imm7;
+  bits<5>  rd;
+  bits<5> rs2;
+  bits<5> rs1;
+
+  let Inst{31} = imm7{6}; //imm13{12}
+  let Inst{30-27} = rd{3-0}; //imm13{10-7}
+  let Inst{26-25} = imm7{5-4}; //imm13{6-5}
+  let Inst{24-20} = rs2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-8} = imm7{3-0}; //imm13{4-1}
+  let Inst{7} = rd{4}; //imm13{11}
+  let Inst{6-0} = opcode.Value;
+}
+
+// B-type with rd field stealing imm[11:7].
 class RVInstBNERD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
               string opcodestr, string argstr>
     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {

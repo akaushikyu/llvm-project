@@ -1059,6 +1059,7 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   case RISCV::BNEI:
 #else
   case RISCV::BNERD:
+  case RISCV::BEQRD:
 #endif
   case RISCV::QC_BNEI:
   case RISCV::QC_E_BNEI:
@@ -1115,7 +1116,8 @@ static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
          "Unknown conditional branch");
 #ifdef BNERD_FEATURE_DISABLED
 #else
-  if (LastInst.getOpcode() == RISCV::BNERD) {
+
+  if (LastInst.getOpcode() == RISCV::BNERD || LastInst.getOpcode() == RISCV::BEQRD) {
     Target = LastInst.getOperand(3).getMBB();
     Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
     Cond.push_back(LastInst.getOperand(0));  // rs1
@@ -1530,8 +1532,9 @@ bool RISCVInstrInfo::reverseBranchCondition(
     Cond[0].setImm(RISCV::BEQI);
     break;
 #else
+  case RISCV::BEQRD:
   case RISCV::BNERD:
-    // BNERD has no inverse form
+    // BNERD and BEQRD have no inverse form
     return true;  // returning true shows "unable to reverse"
 #endif
   case RISCV::BLT:
@@ -1781,6 +1784,7 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   case RISCV::BEQI:
   case RISCV::BNEI:
 #else
+  case RISCV::BEQRD:
   case RISCV::BNERD:
     return isInt<8>(BrOffset);
 #endif
