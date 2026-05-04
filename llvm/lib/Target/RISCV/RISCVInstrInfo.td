@@ -812,6 +812,7 @@ def BGEU : BranchCC_rri<0b111, "bgeu">;
 
 #ifdef BNERD_FEATURE_DISABLED
 #else
+def BEQRD: BranchCC_rrri<0b010, "beqrd">;
 def BNERD: BranchCC_rrri<0b011, "bnerd">;
 #endif
 
