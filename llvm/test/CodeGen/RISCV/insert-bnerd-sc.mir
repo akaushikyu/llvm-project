@@ -1,0 +1,145 @@
+# RUN: llc -mtriple=riscv64 -run-pass=riscv-insert-bnerd-sc \
+# RUN:     -verify-machineinstrs %s -o - | FileCheck %s
+--- |
+  define void @bne_after_lr(ptr %p) { ret void }
+  define void @beq_after_lr(ptr %p) { ret void }
+  define void @lr_no_branch(ptr %p) { ret void }
+  define void @multiple_lrsc_pairs(ptr %p, ptr %q) { ret void }
+...
+# -----------------------------------------------------------------------------
+# Case 1: LR followed by BNE.
+# -----------------------------------------------------------------------------
+---
+name:            bne_after_lr
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: name: bne_after_lr
+  ; CHECK:      bb.0:
+  ; CHECK:        LR_W
+  ; CHECK-NEXT:   BNERD $x5, $x0, undef ${{x[0-9]+}}, %bb.[[BRIDGE:[0-9]+]]
+  ;
+  ; CHECK:      bb.1:
+  ; CHECK:        SC_W
+  ;
+  ; CHECK:      bb.[[BRIDGE]]:
+  ; CHECK:        $x0 = SC_W $x0, undef ${{x[0-9]+}}
+  ; CHECK-NEXT:   PseudoBR %bb.2
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10
+    $x5 = LR_W $x10
+    BNE $x5, $x0, %bb.2
+  bb.1:
+    successors: %bb.2
+    liveins: $x5, $x10
+    early-clobber $x6 = SC_W $x5, $x10
+    PseudoBR %bb.2
+  bb.2:
+    PseudoRET
+...
+# -----------------------------------------------------------------------------
+# Case 2: LR followed by BEQ.
+# -----------------------------------------------------------------------------
+---
+name:            beq_after_lr
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: name: beq_after_lr
+  ; CHECK:      bb.0:
+  ; CHECK:        LR_W
+  ; CHECK-NEXT:   BEQRD $x5, $x0, undef ${{x[0-9]+}}, %bb.[[BRIDGE:[0-9]+]]
+  ; CHECK-NOT:    BNERD
+  ;
+  ; CHECK:      bb.1:
+  ; CHECK:        SC_W
+  ;
+  ; CHECK:      bb.[[BRIDGE]]:
+  ; CHECK:        $x0 = SC_W $x0, undef ${{x[0-9]+}}
+  ; CHECK-NEXT:   PseudoBR %bb.2
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10
+    $x5 = LR_W $x10
+    BEQ $x5, $x0, %bb.2
+  bb.1:
+    successors: %bb.2
+    liveins: $x5, $x10
+    early-clobber $x6 = SC_W $x5, $x10
+    PseudoBR %bb.2
+  bb.2:
+    PseudoRET
+...
+# -----------------------------------------------------------------------------
+# Case 3: LR not followed by a branch — no rewrite.
+# -----------------------------------------------------------------------------
+---
+name:            lr_no_branch
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: name: lr_no_branch
+  ; CHECK:      bb.0:
+  ; CHECK:        LR_W
+  ; CHECK-NEXT:   ADDI
+  ; CHECK-NOT:    BNERD
+  ; CHECK-NOT:    BEQRD
+  bb.0:
+    liveins: $x10
+    $x5 = LR_W $x10
+    $x6 = ADDI $x5, 1
+    PseudoRET
+...
+# -----------------------------------------------------------------------------
+# Case 4: Multiple LR/SC pairs in the same function.
+# -----------------------------------------------------------------------------
+---
+name:            multiple_lrsc_pairs
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: name: multiple_lrsc_pairs
+  ;
+  ; First pair: BNE -> BNERD with its own bridge block.
+  ; CHECK:      bb.0:
+  ; CHECK:        LR_W $x10
+  ; CHECK-NEXT:   BNERD $x5, $x0, undef ${{x[0-9]+}}, %bb.[[BRIDGE1:[0-9]+]]
+  ;
+  ; CHECK:      bb.1:
+  ; CHECK:        SC_W
+  ;
+  ; Second pair: BEQ -> BEQRD with its own bridge block.
+  ; CHECK:      bb.[[LR2:[0-9]+]]:
+  ; CHECK:        LR_W $x11
+  ; CHECK-NEXT:   BEQRD $x7, $x0, undef ${{x[0-9]+}}, %bb.[[BRIDGE2:[0-9]+]]
+  ;
+  ; CHECK:      bb.3:
+  ; CHECK:        SC_W
+  ;
+  ; CHECK:      bb.[[BRIDGE1]]:
+  ; CHECK:        $x0 = SC_W $x0, undef ${{x[0-9]+}}
+  ; CHECK-NEXT:   PseudoBR
+  ;
+  ; CHECK:      bb.[[BRIDGE2]]:
+  ; CHECK:        $x0 = SC_W $x0, undef ${{x[0-9]+}}
+  ; CHECK-NEXT:   PseudoBR
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11
+    $x5 = LR_W $x10
+    BNE $x5, $x0, %bb.2
+  bb.1:
+    successors: %bb.2
+    liveins: $x5, $x10, $x11
+    early-clobber $x6 = SC_W $x5, $x10
+    PseudoBR %bb.2
+  bb.2:
+    successors: %bb.3, %bb.4
+    liveins: $x11
+    $x7 = LR_W $x11
+    BEQ $x7, $x0, %bb.4
+  bb.3:
+    successors: %bb.4
+    liveins: $x7, $x11
+    early-clobber $x28 = SC_W $x7, $x11
+    PseudoBR %bb.4
+  bb.4:
+    PseudoRET
+...

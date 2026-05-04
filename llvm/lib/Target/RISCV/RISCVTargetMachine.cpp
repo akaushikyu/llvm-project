@@ -147,6 +147,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVAsmPrinterPass(*PR);
   initializeRISCVPromoteConstantPass(*PR);
   initializeRISCVCountLRSCPass(*PR);
+  initializeRISCVInsertBNERDSCPass(*PR);
 }
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
@@ -591,6 +592,7 @@ void RISCVPassConfig::addPreEmitPass2() {
 
   // add pass to count LR/SC instruction pairs...
   addPass(createRISCVCountLRSCPass());
+  addPass(createRISCVInsertBNERDSCPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {

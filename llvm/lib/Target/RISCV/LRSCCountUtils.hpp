@@ -239,7 +239,7 @@ enum class LRSCWidth : uint8_t {
 /*--------------------------------------------------------------------------*/
 /* isLR: Returns true if opc is any LR (Load-Reserved) variant.
   Covers all eight opcodes: LR_W, LR_D, and their AQ/RL/AQRL combinations. */
-bool isLR(uint16_t opc) {
+inline bool isLR(uint16_t opc) {
   switch (opc) {
   // LR flavours
   case RISCV::LR_W:
@@ -258,7 +258,7 @@ bool isLR(uint16_t opc) {
 /*--------------------------------------------------------------------------*/
 /* isSC: Returns true if opc is any SC (Store-Conditional) variant.
   Covers all eight opcodes: SC_W, SC_D, and their AQ/RL/AQRL combinations. */
-bool isSC(uint16_t opc) {
+inline bool isSC(uint16_t opc) {
   switch (opc) {
   // SC flavours
   case RISCV::SC_W:
@@ -279,7 +279,7 @@ bool isSC(uint16_t opc) {
   opcode.
   - Returns "W" for word-width variants.
   - Returns "D" for doubleword-width variants. */
-LRSCWidth getLRSCWidth(uint16_t opc) {
+inline LRSCWidth getLRSCWidth(uint16_t opc) {
   switch (opc) {
   case RISCV::LR_W:
   case RISCV::LR_W_AQ:
@@ -313,7 +313,7 @@ LRSCWidth getLRSCWidth(uint16_t opc) {
 /* stringifyOpcode: Returns the string name of a given LR or SC opcode.
   Used when recording matched SC instructions in a MatchTuple.
   Returns the opcode name (e.g. "LR_W_AQRL"), or "" if unknown. */
-std::string stringifyOpcode(uint16_t opc) {
+inline std::string stringifyOpcode(uint16_t opc) {
   switch (opc) {
   // LR flavours
   case RISCV::LR_W:
@@ -364,7 +364,7 @@ std::string stringifyOpcode(uint16_t opc) {
   - Unknown: Returns "Unknown"
   Used exclusively with LLVM_DEBUG to print LRSCWidth values via dbgs(),
   since enum class disables implicit conversion to string. */
-llvm::StringRef stringifyWidth(LRSCWidth w) {
+inline llvm::StringRef stringifyWidth(LRSCWidth w) {
   switch (w) {
   case LRSCWidth::W:
     return "W";
@@ -389,7 +389,7 @@ llvm::StringRef stringifyWidth(LRSCWidth w) {
   - regStr: Destination string that accumulates the printed register name.
   - rso:    String stream backed by regStr; used to write the register name
             via the printReg streaming operator. */
-std::string getRegString(MachineInstr &MI, MachineFunction &MF,
+inline std::string getRegString(MachineInstr &MI, MachineFunction &MF,
                          unsigned operandIdx = 1) {
   Register rs1 = MI.getOperand(operandIdx).getReg();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
@@ -414,7 +414,7 @@ std::string getRegString(MachineInstr &MI, MachineFunction &MF,
             def register operand.
   - rso:    String stream backed by defReg; used to write the register name
             via the printReg streaming operator. */
-bool defsReg(MachineInstr &MI, const std::string &reg) {
+inline bool defsReg(MachineInstr &MI, const std::string &reg) {
   MachineFunction *MF = MI.getParent()->getParent();
   const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
   for (auto &MO : MI.operands()) {
@@ -435,7 +435,7 @@ bool defsReg(MachineInstr &MI, const std::string &reg) {
 
   Variables:
   - count: Running tally of instructions seen so far in MBB. */
-int getMBBInstrCount(const MachineBasicBlock *MBB) {
+inline int getMBBInstrCount(const MachineBasicBlock *MBB) {
   int count = 0;
   for (auto &MI : *MBB) {
     count++;
@@ -447,7 +447,7 @@ int getMBBInstrCount(const MachineBasicBlock *MBB) {
 For each match: prints the LR base register, matched SC opcode, and
 longest distance. For each cycle: prints the block path, whether it is
 an LR cycle, the total instruction count, and the basic block count. */
-void dump(const MatchResult &result) {
+inline void dump(const MatchResult &result) {
   LLVM_DEBUG({
     dbgs() << "=== Matches ===\n";
     for (auto &m : result.matches)

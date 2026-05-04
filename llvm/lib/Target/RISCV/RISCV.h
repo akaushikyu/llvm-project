@@ -40,6 +40,9 @@ void initializeRISCVCodeGenPrepareLegacyPassPass(PassRegistry &);
 FunctionPass *createRISCVCountLRSCPass();
 void initializeRISCVCountLRSCPass(PassRegistry &);
 
+FunctionPass *createRISCVInsertBNERDSCPass();
+void initializeRISCVInsertBNERDSCPass(PassRegistry &);
+
 FunctionPass *createRISCVDeadRegisterDefinitionsPass();
 void initializeRISCVDeadRegisterDefinitionsPass(PassRegistry &);
 
