@@ -523,6 +523,34 @@ class RVInstB<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
 #ifdef BNERD_FEATURE_DISABLED
 #else
 // B-type with rd field stealing imm[11:7].
+//
+// Rationale for this encoding:
+// Standard RISC-V B-type instructions (e.g., BEQ) use a 13-bit signed branch
+// immediate split across bits {31, 7, 30-25, 11-8} to encode imm[12|11|10:5|4:1]
+// (with imm[0] always 0 since branches are 2-byte aligned). All 32 bits of
+// the instruction word are consumed: there is no native room for a destination
+// register in a standard B-type.
+//
+// To add an rd field without inventing a new instruction format or burning a
+// fresh major opcode, we "steal" 5 bits from the branch immediate and remap
+// them to encode rd:
+//   - Inst{30-27} <- rd{3-0}   (was imm[10:7])
+//   - Inst{7}     <- rd{4}     (was imm[11])
+//
+// This way:
+//   1. The remaining immediate (imm7) is 7 bits wide, covering only
+//      imm[12|6:5|4:1].A much shorter branch reach than standard B-type.
+//      This is acceptable for the intended use case (short forward/backward
+//      branches).
+//   2. rd bits are scattered to match the original B-type field positions,
+//      which preserves the decoder's existing wiring for rs1/rs2/funct3/opcode
+//      and only changes how the stolen bits are interpreted.
+//   3. imm[12] (sign bit) stays at Inst{31} so sign-extension hardware is
+//      reused unchanged.
+//   4. rs1, rs2, funct3, and opcode keep their canonical B-type positions,
+//      so register-read paths and funct3 decoding need no modification --
+//      only the immediate-assembly mux and a new rd write-enable path are
+//      added.
 class RVInstBEQRD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
               string opcodestr, string argstr>
     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
