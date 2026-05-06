@@ -84,7 +84,7 @@ RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
 Register RISCVInsertBNERDSC::getFreeReg(const MachineBasicBlock &MBB,
                                 const MachineInstr &Br) {
   SmallSet<Register, 32> UsedRegs;
-  Register freeReg;
+  Register FreeReg;
   for (const MachineInstr &MI : MBB) {
     for (const MachineOperand &MO : MI.operands()) {
       if (!MO.isReg())
@@ -137,8 +137,8 @@ Register RISCVInsertBNERDSC::getFreeReg(const MachineBasicBlock &MBB,
   };
   for (Register Reg : TempRegs){
     if (!UsedRegs.count(Reg)){
-      freeReg = Reg;
-      return freeReg;
+      FreeReg = Reg;
+      return FreeReg;
     }
   }
     
@@ -158,10 +158,10 @@ Register RISCVInsertBNERDSC::getFreeReg(const MachineBasicBlock &MBB,
   };
   for (Register Reg : FallbackRegs)
     if (!UsedRegs.count(Reg)){
-      freeReg = Reg;
-      return freeReg;
+      FreeReg = Reg;
+      return FreeReg;
     }
-    assert(freeReg.isValid() && "RISCVInsertBNERDSC: no free register available in target block");
+    assert(FreeReg.isValid() && "RISCVInsertBNERDSC: no free register available in target block");
   return Register(); // no free register found
   
 }
@@ -248,61 +248,63 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       if(!TargetMBB){
         continue;
       }
-      Register freeReg = getFreeReg(*TargetMBB, Br);
-      if(!freeReg){
+      Register FreeReg = getFreeReg(*TargetMBB, Br);
+      if(!FreeReg){
         continue;
       }
       LLVM_DEBUG(dbgs() << "RISCVInsertBNERDSC: rewriting LR/Br in "
                   << MBB.getName()
-                  << ", freeReg=" << printReg(freeReg) << "\n");
+                  << ", FreeReg=" << printReg(FreeReg) << "\n");
       MachineBasicBlock *LR_MBB = &MBB;
       DebugLoc DL = Br.getDebugLoc();
       Register Rs1 = Br.getOperand(0).getReg();
       Register Rs2 = Br.getOperand(1).getReg();
       
 
-      MachineBasicBlock *bridgeSCBB = MF.CreateMachineBasicBlock(LR_MBB->getBasicBlock());
-      //  MF.insert(InsertPos, bridgeSCBB); This would cause problems after applying the changes with the successors
+      MachineBasicBlock *BridgeSCBB = MF.CreateMachineBasicBlock(LR_MBB->getBasicBlock());
+      //  MF.insert(InsertPos, BridgeSCBB); This would cause problems after applying the changes with the successors
       // insert at end of function — doesn't disrupt any existing fall-throughs
-      MF.push_back(bridgeSCBB);
+      MF.push_back(BridgeSCBB);
 
-      // SC_W x0, freeReg, x0 — clears the LR reservation as a side-effect.
-      BuildMI(bridgeSCBB, DebugLoc(), TII->get(RISCV::SC_W))
-          .addReg(RISCV::X0, RegState::Define) // rd
-          .addReg(RISCV::X0)                  // rs1
-          .addReg(freeReg, RegState::Undef);                     // rs2
-      bridgeSCBB->addLiveIn(freeReg);
+      // SC_W x0, FreeReg, x0 — clears the LR reservation as a side-effect.
+      BuildMI(BridgeSCBB, DebugLoc(), TII->get(RISCV::SC_W))
+          .addReg(RISCV::X0, RegState::Define)  // rd
+          .addReg(FreeReg)                      // rs2
+          .addReg(RISCV::X0);                   // rs1
+
+      BridgeSCBB->addLiveIn(FreeReg);
       // Unconditional jump to the original target.
-      BuildMI(bridgeSCBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(TargetMBB);
+      BuildMI(BridgeSCBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(TargetMBB);
       
       if(Br.getOpcode()== RISCV::BEQ){
         BuildMI(*LR_MBB, Br, DL, TII->get(RISCV::BEQRD))
+            .addReg(FreeReg, RegState::Define)   // encoded into imm[11:7]
             .addReg(Rs1)
             .addReg(Rs2)
-            .addReg(freeReg, RegState::Undef)   // encoded into imm[11:7]
-            .addMBB(bridgeSCBB) 
+            .addMBB(BridgeSCBB) 
             .getInstr();
       }
       else{
         BuildMI(*LR_MBB, Br, DL, TII->get(RISCV::BNERD))
+            .addReg(FreeReg, RegState::Define)   // encoded into imm[11:7]
             .addReg(Rs1)
             .addReg(Rs2)
-            .addReg(freeReg, RegState::Undef)   // encoded into imm[11:7]
-            .addMBB(bridgeSCBB) // retargeted below
+            .addMBB(BridgeSCBB) // retargeted below
             .getInstr();
       }
+      BridgeSCBB->addLiveIn(FreeReg);
       // Advancing past Br before erasing it.
       MBBI = std::next(Br.getIterator()); //(check if MBBI++ works or this)
       Br.eraseFromParent();
       // Rewire CFG edges.
       LR_MBB->removeSuccessor(TargetMBB);
 
-      LR_MBB->addSuccessor(bridgeSCBB);
-
-      bridgeSCBB->addSuccessor(TargetMBB);
+      LR_MBB->addSuccessor(BridgeSCBB);
+      
+      BridgeSCBB->addSuccessor(TargetMBB);
       
       LR_MBB->updateTerminator(LR_MBB->getNextNode());
-      bridgeSCBB->updateTerminator(bridgeSCBB->getNextNode());
+      BridgeSCBB->updateTerminator(BridgeSCBB->getNextNode());
 
       seenLRMBBs.insert(LR_MBB);
 

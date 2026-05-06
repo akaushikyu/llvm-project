@@ -671,8 +671,8 @@ class BranchCC_rri<bits<3> funct3, string opcodestr>
 // immediate are repurposed as a 5-bit register field (rd). The remaining
 // offset bits [12|6:1] still carry the PC-relative branch target.
 class BranchCC_rrri<bits<3> funct3, string opcodestr>
-    : RVInstBNERD<funct3, OPC_BRANCH, (outs),
-              (ins GPR:$rs1, GPR:$rs2, GPR:$rd, bare_simm8_lsb0:$imm7),
+    : RVInstBNERD<funct3, OPC_BRANCH, (outs GPR:$rd),
+              (ins GPR:$rs1, GPR:$rs2, bare_simm8_lsb0:$imm7),
               opcodestr, "$rd, $rs1, $rs2, $imm7">,
       Sched<[WriteJmp, ReadJmp, ReadJmp]> {
   bits<5> rd;
