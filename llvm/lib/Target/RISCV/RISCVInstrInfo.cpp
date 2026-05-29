@@ -1047,6 +1047,8 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   case RISCV::BEQ:
 #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
+#else
+  case RISCV::BEQRD:
 #endif
   case RISCV::CV_BEQIMM:
   case RISCV::QC_BEQI:
@@ -1059,7 +1061,6 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   case RISCV::BNEI:
 #else
   case RISCV::BNERD:
-  case RISCV::BEQRD:
 #endif
   case RISCV::QC_BNEI:
   case RISCV::QC_E_BNEI:
@@ -1984,7 +1985,8 @@ RISCVInstrInfo::optimizeSelect(MachineInstr &MI,
   // Add condition code, inverting if necessary.
   auto CC = static_cast<RISCVCC::CondCode>(MI.getOperand(3).getImm());
   if (Invert)
-    CC = RISCVCC::getInverseBranchCondition(CC);
+    CC = RISCVCC::
+getInverseBranchCondition(CC);
   NewMI.addImm(CC);
 
   // Copy the false register.

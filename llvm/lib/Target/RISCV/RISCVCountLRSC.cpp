@@ -239,4 +239,3 @@ void RISCVCountLRSC::updateStats(MachineFunction& MF) {
     return;
   }
 }
-

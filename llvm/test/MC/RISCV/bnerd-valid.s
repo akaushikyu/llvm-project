@@ -2,7 +2,7 @@
 # RUN:        | FileCheck %s --check-prefixes=CHECK-ENCODING,CHECK-ASM
 # RUN: llvm-mc -triple=riscv64 -show-encoding %s \
 # RUN:        | FileCheck %s --check-prefixes=CHECK-ENCODING,CHECK-ASM
-;BNERD
+# BNERD
 bnerd x7, x30, x5, 8 
 # CHECK-ASM: bnerd t2, t5, t0, 8 
 # CHECK-ENCODING: [0x63,0x34,0x5f,0x38] 
@@ -19,7 +19,7 @@ bnerd x6, x31, x28, -128
 # CHECK-ASM: bnerd t1, t6, t3, -128 
 # CHECK-ENCODING: [0x63,0xb0,0xcf,0xb1]
 
-;BEQRD
+# BEQRD
 beqrd t2, t5, t0, 8
 # CHECK-ASM: beqrd t2, t5, t0, 8
 # CHECK-ENCODING: [0x63,0x24,0x5f,0x38] 
