@@ -591,8 +591,9 @@ void RISCVPassConfig::addPreEmitPass2() {
     addPass(createCFIInstrInserter());
 
   // add pass to count LR/SC instruction pairs...
-  addPass(createRISCVCountLRSCPass());
   addPass(createRISCVInsertBNERDSCPass());
+  addPass(createRISCVExpandINLINEASMPass());
+  addPass(createRISCVCountLRSCPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
