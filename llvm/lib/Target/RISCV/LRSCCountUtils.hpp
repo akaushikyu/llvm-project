@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 using namespace llvm;
 
@@ -26,46 +27,218 @@ struct LRSCCounts {
 
   /*--------------------------------------------------------------------------*/
   /* Key types used for hash maps.
-    - MFKey: identifies a function (by pointer identity)
-    - BBKey: identifies a basic block (by pointer identity)
-    - OpKey: identifies an opcode/flavor label (string) */
+
+    - BBKey: identifies a basic block by pointer identity
+    - OpKey: identifies an opcode/flavor label
+    - MBBLRBaseRegKey: identifies an LR along with its base register
+      in the format:
+
+        "MBB:LR_instr:LR_base_reg"
+
+      Example:
+
+        "bb7:lr.w:a0"
+
+    - TerminatingPathKey: identifies one terminating path for an LR
+    - LoopPathKey: identifies one loop path that belongs to a terminating path
+    - TerminationCauseKey: identifies why a terminating path stopped */
 
   using BBKey = const MachineBasicBlock *;
   using OpKey = std::string;
+  using MBBLRBaseRegKey = std::string;
+  using TerminatingPathKey = std::string;
+  using LoopPathKey = std::string;
+  using TerminationCauseKey = std::string;
 
   /*--------------------------------------------------------------------------*/
-  /* BBList: preserves an explicit traversal/iteration order of BB pointers
-    for a given MachineFunction. This is used to emit stable bb_index values.
-  */
+  /* LRToLoopSeqFlavMap:
+     A string in the format:
+
+       "MBB:LR_instr:LR_base_reg"
+
+     -> Conditional/Unconditional. */
+  using LRToLoopSeqFlavMap = std::map<MBBLRBaseRegKey, bool>;
+
+  /*--------------------------------------------------------------------------*/
+  /* LoopInfo:
+     Stores all information for one loop path.
+
+     JSON shape:
+
+       {
+         "path": "<loop_path_string>",
+         "cycle_flavour": "<cycle_flavour_string>",
+         "num_instr": <number_of_instructions>
+       }
+
+     - Path: string representation of the loop/cycle path
+     - CycleFlavour: string representation of the cycle flavour
+     - NumInstr: number of instructions in this loop path */
+  struct LoopInfo {
+    LoopPathKey Path;
+    std::string CycleFlavour;
+    unsigned NumInstr = 0;
+  };
+
+  /*--------------------------------------------------------------------------*/
+  /* LoopInfoList:
+     Stores all loop paths that belong to one terminating path. */
+  using LoopInfoList = std::vector<LoopInfo>;
+
+  /*--------------------------------------------------------------------------*/
+  /* TerminatingPathInfo:
+     Stores all information for one terminating path.
+
+     JSON shape:
+
+       "<terminating_path_string>": {
+         "cause": "<cause_of_termination>",
+         "distance": <number_of_instructions>,
+         "loops": [
+           {
+             "path": "<loop_path_1>",
+             "cycle_flavour": "<cycle_flavour_string>",
+             "num_instr": <number_of_instructions>
+           },
+           {
+             "path": "<loop_path_2>",
+             "cycle_flavour": "<cycle_flavour_string>",
+             "num_instr": <number_of_instructions>
+           }
+         ]
+       }
+
+     - Cause: why this path terminated
+     - Distance: number of instructions from LR to termination
+     - Loops: all loop paths that are features of this terminating path */
+  struct TerminatingPathInfo {
+    TerminationCauseKey Cause;
+    unsigned Distance = 0;
+    LoopInfoList Loops;
+  };
+
+  /*--------------------------------------------------------------------------*/
+  /* TerminatingPathMap:
+     terminating path string -> terminating path information. */
+  using TerminatingPathMap = std::map<TerminatingPathKey, TerminatingPathInfo>;
+
+  /*--------------------------------------------------------------------------*/
+  /* LRToTerminatingPathMap:
+     LR key -> terminating paths for that LR.
+
+     LR key format:
+
+       "MBB:LR_instr:LR_base_reg"
+
+     Full JSON shape:
+
+       "lr_paths": {
+         "<MBB:LR_instr:LR_base_reg>": {
+           "terminating_paths": {
+             "<terminating_path_string>": {
+               "cause": "<cause_of_termination>",
+               "distance": <number_of_instructions>,
+               "loops": [
+                 {
+                   "path": "<loop_path_1>",
+                   "cycle_flavour": "<cycle_flavour_string>",
+                   "num_instr": <number_of_instructions>
+                 }
+               ]
+             }
+           }
+         }
+       } */
+  using LRToTerminatingPathMap = std::map<MBBLRBaseRegKey, TerminatingPathMap>;
+
+  /*--------------------------------------------------------------------------*/
+  /* Stores all LR -> terminating path information. */
+  LRToTerminatingPathMap LRToTerminatingPaths;
+
+  /*--------------------------------------------------------------------------*/
+  /* BBList:
+     Preserves an explicit traversal/iteration order of BB pointers for a
+     given MachineFunction. This is used to emit stable bb_index values. */
   using BBList = std::vector<BBKey>;
 
   /* list of BB pointers in MF */
   BBList basicBlockOrder;
 
   /*--------------------------------------------------------------------------*/
-  /* FlavourMap: opcode/flavor string -> count within a BB. */
+  /* FlavourMap:
+     opcode/flavor string -> count within a BB. */
   using FlavourMap = std::unordered_map<OpKey, int>;
 
   /*--------------------------------------------------------------------------*/
-  /* BBToFlavourMap: BB -> (opcode/flavor -> count). */
-  using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
-
-  BBToFlavourMap BBFlavourCounts;
+  /* ConditionalLoopSeqCountMap:
+     conditional loop sequence -> count. */
+  using ConditionalLoopSeqCountMap = std::unordered_map<std::string, int>;
 
   /*--------------------------------------------------------------------------*/
-  /* BBCountMap: BB -> total LR/SC count in that BB (definition-dependent). */
+  /* UnconditionalLoopSeqCountMap:
+     unconditional loop sequence -> count. */
+  using UnconditionalLoopSeqCountMap = std::unordered_map<std::string, int>;
+
+  /*--------------------------------------------------------------------------*/
+  /* BBToFlavourMap:
+     BB -> opcode/flavor -> count. */
+  using BBToFlavourMap = std::unordered_map<BBKey, FlavourMap>;
+
+  /*--------------------------------------------------------------------------*/
+  /* BBToConditionalLoopSeqMap:
+     BB -> conditional loop sequence -> count.
+
+     BBToUnconditionalLoopSeqMap:
+     BB -> unconditional loop sequence -> count. */
+  using BBToConditionalLoopSeqMap =
+      std::unordered_map<BBKey, ConditionalLoopSeqCountMap>;
+
+  using BBToUnconditionalLoopSeqMap =
+      std::unordered_map<BBKey, UnconditionalLoopSeqCountMap>;
+
+  BBToFlavourMap BBFlavourCounts;
+  BBToConditionalLoopSeqMap BBConditionalLoopSeqCounts;
+  BBToUnconditionalLoopSeqMap BBUnconditionalLoopSeqCounts;
+
+  /*--------------------------------------------------------------------------*/
+  /* BBCountMap:
+     BB -> total LR/SC count in that BB. */
   using BBCountMap = std::unordered_map<BBKey, int>;
 
   /*--------------------------------------------------------------------------*/
-  /* Func -> BB -> (opcode -> count)
-    Stores per-basic-block opcode/flavor breakdowns per function. */
+  /* BB -> opcode -> count.
+     Stores per-basic-block opcode/flavor breakdowns per function. */
   BBCountMap BBCount;
 
-  // Total LRSCCount per function
+private:
+  /*--------------------------------------------------------------------------*/
+  /* Current LR key being analyzed.
+
+     Format:
+
+       "MBB:LR_instr:LR_base_reg"
+
+     Example:
+
+       "bb7:lr.w:a0"
+
+     This lets updateLRTerminatingPath() use the current LR without passing
+     LRKey as a parameter every time. */
+  MBBLRBaseRegKey LRKey;
+
+  /* Total LRSCCount per function. */
   unsigned int functionLRSCCount = 0;
 
-  /* Map from function-name -> per-function object (totals + BB list). */
-  llvm::json::Object FuncMap; // function-name -> { totals, basic_blocks }
+  /* Total conditional loop-sequence LRSCCount per function. */
+  unsigned int totalLoopSeqConditionalLRSCCount = 0;
+
+  /* Total unconditional loop-sequence LRSCCount per function. */
+  unsigned int totalLoopSeqUnconditionalLRSCCount = 0;
+
+public:
+  /*--------------------------------------------------------------------------*/
+  /* Map from function-name -> per-function object. */
+  llvm::json::Object FuncMap;
 
   /*--------------------------------------------------------------------------*/
   /* Clears all stored data across every map. */
@@ -73,53 +246,403 @@ struct LRSCCounts {
     basicBlockOrder.clear();
     BBFlavourCounts.clear();
     BBCount.clear();
+    BBConditionalLoopSeqCounts.clear();
+    BBUnconditionalLoopSeqCounts.clear();
+    /* Clear current LR key. */
+    LRKey.clear();
+
+    /* Clear LR -> terminating path information. */
+    LRToTerminatingPaths.clear();
+
+    functionLRSCCount = 0;
+    totalLoopSeqConditionalLRSCCount = 0;
+    totalLoopSeqUnconditionalLRSCCount = 0;
   }
 
   /*--------------------------------------------------------------------------*/
-  /* Updates the per-function total count for the provided Func by adding
-   * mfCount. */
-  void updateFuncCnt(unsigned mfCount) { functionLRSCCount += mfCount; }
+  /* Builds an LR key in the format:
+
+       "MBB:LR_instr:LR_base_reg"
+
+     Example:
+
+       "bb7:lr.w:a0" */
+  std::string buildLRKey(const MachineBasicBlock &MBB,
+                         const std::string &LRInstr,
+                         const std::string &LRBaseReg) const {
+    return "bb" + std::to_string(MBB.getNumber()) + ":" + LRInstr + ":" +
+           LRBaseReg;
+  }
 
   /*--------------------------------------------------------------------------*/
-  /* Updates the per-basic-block total count for (MF, MBB) by adding bbCount. */
+  /* Sets the current LR key directly. */
+  void setLRKey(const std::string &Key) { LRKey = Key; }
+
+  /*--------------------------------------------------------------------------*/
+  /* Builds and sets the current LR key.
+
+     LR key format:
+
+       "MBB:LR_instr:LR_base_reg"
+
+     Example:
+
+       "bb7:lr.w:a0" */
+  void setLRKey(const MachineBasicBlock &MBB, const std::string &LRInstr,
+                const std::string &LRBaseReg) {
+    LRKey = buildLRKey(MBB, LRInstr, LRBaseReg);
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* Gets the current LR key. */
+  const std::string &getLRKey() const { return LRKey; }
+
+  /*--------------------------------------------------------------------------*/
+  /* Clears the current LR key. */
+  void clearLRKey() { LRKey.clear(); }
+
+  /*--------------------------------------------------------------------------*/
+  /* Updates the per-function total Conditional/Unconditional LR count for the
+   * provided Func by adding mfCount. */
+  void setFuncLoopSeqFlavCnt(unsigned mfCount, bool isConditional) {
+    if (isConditional) {
+      totalLoopSeqConditionalLRSCCount += mfCount;
+    } else {
+      totalLoopSeqUnconditionalLRSCCount += mfCount;
+    }
+  }
+
+  unsigned getFuncLoopSeqFlavCnt(bool isConditional) {
+    if (isConditional) {
+      return totalLoopSeqConditionalLRSCCount;
+    } else {
+      return totalLoopSeqUnconditionalLRSCCount;
+    }
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* Updates the per-function total count for the provided Func. */
+  void setFuncCnt(unsigned mfCount) { functionLRSCCount = mfCount; }
+
+  unsigned getFuncCnt() { return functionLRSCCount; }
+
+  /*--------------------------------------------------------------------------*/
+  /* Updates the per-basic-block total count for MBB by adding bbCount. */
   void updateBBCnt(const MachineBasicBlock &MBB, unsigned bbCount) {
     BBCount[&MBB] += bbCount;
   }
 
   /*--------------------------------------------------------------------------*/
-  /* Increments the opcode/flavor counter for (MF, MBB, OpKey) by 1. */
+  /* Increments the opcode/flavor counter for MBB and OpKey by 1. */
   void updateBBFlavCnt(const MachineBasicBlock &MBB, std::string OpKey) {
     BBFlavourCounts[&MBB][OpKey]++;
   }
 
   /*--------------------------------------------------------------------------*/
+  /* Updates the per-BB total Conditional/Unconditional LR count for the
+   * provided BB by adding one occurrence. */
+  void updateBBLoopSeqFlavCnt(const MachineBasicBlock &MBB,
+                              bool isConditional) {
+    if (isConditional) {
+      BBConditionalLoopSeqCounts[&MBB]["conditional_loop_seq"]++;
+    } else {
+      BBUnconditionalLoopSeqCounts[&MBB]["unconditional_loop_seq"]++;
+    }
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* Records one terminating path for the current LR key.
+
+     Before calling this, we call:
+
+       setLRKey(MBB, LRInstr, LRBaseReg)
+
+    This function attaches the branch-local loop list passed by the DFS state
+    to this terminating path. It does not clear the list because the list is
+    owned by the DFS branch state.
+
+     TerminatingPath:
+       String representation of the terminating path.
+
+     Cause:
+       String describing why the path terminated.
+
+     Distance:
+       Number of instructions from the LR to this termination. */
+  void updateLRTerminatingPath(const std::string &TerminatingPath,
+                               const std::string &Cause, unsigned Distance,
+                               const LoopInfoList &Loops) {
+
+    TerminatingPathInfo &Info = LRToTerminatingPaths[LRKey][TerminatingPath];
+    Info.Cause = Cause;
+    Info.Distance = Distance;
+
+    for (const auto &Loop : Loops) {
+      Info.Loops.push_back(Loop);
+    }
+  }
+  /*--------------------------------------------------------------------------*/
+  /* loopAlreadyAttached: Returns true if Candidate is already present in the
+    provided terminating-path loop list.
+    - Loops:     Loop list already attached to one terminating path.
+    - Candidate: Loop entry being checked before insertion.
+    Used to prevent duplicate loop objects from being emitted under the same
+    terminating path in the final JSON output. */
+  bool loopAlreadyAttached(const LoopInfoList &Loops,
+                           const LoopInfo &Candidate) const {
+    for (const auto &Loop : Loops) {
+      if (Loop.Path == Candidate.Path &&
+          Loop.CycleFlavour == Candidate.CycleFlavour)
+        return true;
+    }
+    return false;
+  }
+  /*--------------------------------------------------------------------------*/
+  /* terminatingPathContainsBlock: Returns true if a terminating path string
+    contains the given basic block number as a complete path element.
+    - TerminatingPath: String path formatted as "A -> B -> C".
+    - BlockNumber:     MachineBasicBlock number to search for.
+    Splits the path on " -> " instead of using substring search so block "20"
+    does not accidentally match "120" or "201". */
+  bool terminatingPathContainsBlock(const std::string &TerminatingPath,
+                                    unsigned BlockNumber) const {
+    std::string Target = std::to_string(BlockNumber);
+    std::string Token;
+
+    for (size_t i = 0; i < TerminatingPath.size();) {
+      size_t Arrow = TerminatingPath.find(" -> ", i);
+
+      if (Arrow == std::string::npos) {
+        Token = TerminatingPath.substr(i);
+        return Token == Target;
+      }
+
+      Token = TerminatingPath.substr(i, Arrow - i);
+      if (Token == Target)
+        return true;
+
+      i = Arrow + 4;
+    }
+
+    return false;
+  }
+  /*--------------------------------------------------------------------------*/
+  /* attachLoopToExistingTerminatingPathsWithAnchor: Attaches Candidate to every
+    already-recorded terminating path for the current LR that contains the
+    anchor block number.
+    - AnchorBlockNumber: Block number used as the loop attachment point.
+    - Candidate:         Loop entry to attach.
+    Used by the older anchor-based loop attachment strategy to retroactively
+    update terminating paths that were recorded before a loop was discovered. */
+  void
+  attachLoopToExistingTerminatingPathsWithAnchor(unsigned AnchorBlockNumber,
+                                                 const LoopInfo &Candidate) {
+    TerminatingPathMap &TerminatingPaths = LRToTerminatingPaths[LRKey];
+
+    for (auto &PathPair : TerminatingPaths) {
+      const std::string &TerminatingPath = PathPair.first;
+      TerminatingPathInfo &Info = PathPair.second;
+
+      if (!terminatingPathContainsBlock(TerminatingPath, AnchorBlockNumber)) {
+        continue;
+      }
+
+      if (!loopAlreadyAttached(Info.Loops, Candidate)) {
+        Info.Loops.push_back(Candidate);
+      }
+    }
+  }
+  /*--------------------------------------------------------------------------*/
+  /* getCurrentLRTerminatingPaths:
+    Returns the terminating-path map for the currently active LR key. */
+  TerminatingPathMap &getCurrentLRTerminatingPaths() {
+    return LRToTerminatingPaths[LRKey];
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* replaceLoopsForCurrentLRTerminatingPath:
+    Replaces the loop list for one already-recorded terminating path of the
+    current LR key. Used after DFS finishes, when all loops for this LR are
+    known. */
+  void
+  replaceLoopsForCurrentLRTerminatingPath(const std::string &TerminatingPath,
+                                          const LoopInfoList &Loops) {
+    TerminatingPathInfo &Info = LRToTerminatingPaths[LRKey][TerminatingPath];
+
+    Info.Loops.clear();
+
+    for (const auto &Loop : Loops) {
+      Info.Loops.push_back(Loop);
+    }
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* Builds the JSON object for all LR terminating path information.
+
+     JSON shape:
+
+       {
+         "<MBB:LR_instr:LR_base_reg>": {
+           "terminating_paths": {
+             "<terminating_path_string>": {
+               "cause": "<cause_of_termination>",
+               "distance": <number_of_instructions>,
+               "hasLoop": <flag_of_loop_existance>,
+               "numberOfLoops": <number_of_loops>,
+               "loops": [
+                 {
+                   "path": "<loop_path_1>",
+                   "cycle_flavour": "<cycle_flavour_string>",
+                   "num_instr": <number_of_instructions>
+                 },
+                 {
+                   "path": "<loop_path_2>",
+                   "cycle_flavour": "<cycle_flavour_string>",
+                   "num_instr": <number_of_instructions>
+                 }
+               ]
+             }
+           }
+         }
+       } */
+  llvm::json::Object buildLRPathsJSON() const {
+    llvm::json::Object LRPathsObj;
+
+    for (const auto &LRPair : LRToTerminatingPaths) {
+      const std::string &LocalLRKey = LRPair.first;
+      const TerminatingPathMap &TerminatingPaths = LRPair.second;
+
+      /* JSON object for one LR key. */
+      llvm::json::Object LRObj;
+
+      /* JSON object containing all terminating paths for this LR. */
+      llvm::json::Object TerminatingPathsObj;
+
+      for (const auto &PathPair : TerminatingPaths) {
+        const std::string &TerminatingPath = PathPair.first;
+        const TerminatingPathInfo &Info = PathPair.second;
+
+        /* True if this terminating path has at least one NORMAL loop. */
+        bool HasLoop = false;
+
+        for (const auto &Loop : Info.Loops) {
+          if (Loop.CycleFlavour == "NORMAL") {
+            HasLoop = true;
+            break;
+          }
+        }
+
+        /* JSON object for one terminating path. */
+        llvm::json::Object PathObj;
+
+        /* NORMAL-loop flag for this terminating path. */
+        PathObj["hasLoop"] = HasLoop;
+
+        /* Number of NORMAL loop entries attached to this terminating path. */
+        int64_t NumberOfNormalLoops = 0;
+
+        for (const auto &Loop : Info.Loops) {
+          if (Loop.CycleFlavour == "NORMAL")
+            ++NumberOfNormalLoops;
+        }
+
+        PathObj["numberOfLoops"] = NumberOfNormalLoops;
+
+        /* Cause of termination for this path. */
+        PathObj["cause"] = Info.Cause;
+
+        /* Number of instructions from LR to termination. */
+        PathObj["distance"] = Info.Distance;
+
+        /* Loop paths that belong to this terminating path. */
+        llvm::json::Array LoopsArray;
+
+        for (const auto &Loop : Info.Loops) {
+          llvm::json::Object LoopObj;
+
+          LoopObj["path"] = Loop.Path;
+          LoopObj["cycle_flavour"] = Loop.CycleFlavour;
+          LoopObj["num_instr"] = Loop.NumInstr;
+
+          LoopsArray.push_back(std::move(LoopObj));
+        }
+
+        PathObj["loops"] = std::move(LoopsArray);
+
+        /* Attach this terminating path object using the path string as key. */
+        TerminatingPathsObj[TerminatingPath] = std::move(PathObj);
+      }
+
+      /* Attach terminating paths to the LR object. */
+      LRObj["terminating_paths"] = std::move(TerminatingPathsObj);
+
+      /* Attach this LR object to the complete LR paths object. */
+      LRPathsObj[LocalLRKey] = std::move(LRObj);
+    }
+
+    return LRPathsObj;
+  }
+
+  /*--------------------------------------------------------------------------*/
   /* Serializes the entire structure to JSON in the following high-level shape:
+
       {
-        "functions": {
+        "function": {
           "<function_name>": {
             "total_lrsc_occurrences": <int>,
             "basic_blocks": [
               {
-                "bb_index": <int>,
+                "bb_traversal_index": <int>,
                 "mbb_number": <int>,
-                "bb_total_lrsc_occurrences": <int>,
-                "flavors": { "<op>": <count>, ... }
-              },
-              ...
-            ]
-          },
-          ...
+                "num_insn": <int>,
+                "lrsc_count": <int>,
+                "bb_total_conditional_loop_seq_lrsc_occurrences": <int>,
+                "bb_total_unconditional_loop_seq_lrsc_occurrences": <int>,
+                "flavors": {
+                  "<op>": <count>
+                },
+                "loop_seq_flavours": {
+                  "conditional_loop_seq": <count>
+                },
+                "uncond_loop_seq_flavours": {
+                  "unconditional_loop_seq": <count>
+                }
+              }
+            ],
+            "total_loop_seq_conditional_lrsc_occurrences": <int>,
+            "total_loop_seq_unconditional_lrsc_occurrences": <int>
+          }
+        },
+
+        "lr_paths": {
+          "<MBB:LR_instr:LR_base_reg>": {
+            "terminating_paths": {
+              "<terminating_path_string>": {
+                "cause": "<cause_of_termination>",
+                "distance": <number_of_instructions>,
+                "loops": [
+                  {
+                    "path": "<loop_path_1>",
+                    "cycle_flavour": "<cycle_flavour_string>",
+                    "num_instr": <number_of_instructions>
+                  }
+                ]
+              }
+            }
+          }
         }
       } */
-
   llvm::json::Value getJSONObj() {
     llvm::json::Object Root;
-    /* Attach the function map to the root object and return as a JSON value. */
+
+    /* Attach the function map to the root object. */
     Root["function"] = std::move(FuncMap);
+
     return llvm::json::Value(std::move(Root));
   }
 
-  // This is called per function
+  /*--------------------------------------------------------------------------*/
+  /* This is called per function. */
   void toJSON(MachineFunction &MF) {
     /* Root object for the JSON output. */
     llvm::json::Object Root;
@@ -130,6 +653,7 @@ struct LRSCCounts {
     for (size_t i = 0; i < basicBlockOrder.size(); ++i) {
       /* BB pointer at this position in iteration order. */
       const MachineBasicBlock *MBB = basicBlockOrder[i];
+
       /* JSON object holding this BB's metadata and counts. */
       llvm::json::Object BBObj;
 
@@ -139,7 +663,7 @@ struct LRSCCounts {
       /* LLVM internal BB number, or -1 if MBB is null. */
       BBObj["mbb_number"] = MBB ? static_cast<int64_t>(MBB->getNumber()) : -1;
 
-      // lambda function to calculate MBB size in insn count
+      /* Lambda function to calculate MBB size in instruction count. */
       auto getMBBSize = [](const MachineBasicBlock *MBB) {
         unsigned cnt = 0;
         for (auto &MI : *MBB) {
@@ -151,8 +675,19 @@ struct LRSCCounts {
       BBObj["num_insn"] = getMBBSize(MBB);
       BBObj["lrsc_count"] = MBB ? BBCount[MBB] : 0;
 
+      BBObj["bb_total_conditional_loop_seq_lrsc_occurrences"] =
+          MBB ? BBConditionalLoopSeqCounts[MBB]["conditional_loop_seq"] : 0;
+
+      BBObj["bb_total_unconditional_loop_seq_lrsc_occurrences"] =
+          MBB ? BBUnconditionalLoopSeqCounts[MBB]["unconditional_loop_seq"] : 0;
+
       /* Build a JSON object of opcode/flavor counts for this BB. */
       llvm::json::Object FlavoursObj;
+
+      /* Build JSON objects of loop-sequence flavor counts for this BB. */
+      llvm::json::Object LoopSeqFlavoursObj;
+      llvm::json::Object UncondLoopSeqFlavoursObj;
+
       auto bbit = BBFlavourCounts.find(MBB);
       if (bbit != BBFlavourCounts.end()) {
         for (const auto &OP : bbit->second) {
@@ -160,8 +695,24 @@ struct LRSCCounts {
         }
       }
 
+      auto loopSeqBit = BBConditionalLoopSeqCounts.find(MBB);
+      if (loopSeqBit != BBConditionalLoopSeqCounts.end()) {
+        for (const auto &OP : loopSeqBit->second) {
+          LoopSeqFlavoursObj.try_emplace(OP.first, OP.second);
+        }
+      }
+
+      auto uncondLoopSeqBit = BBUnconditionalLoopSeqCounts.find(MBB);
+      if (uncondLoopSeqBit != BBUnconditionalLoopSeqCounts.end()) {
+        for (const auto &OP : uncondLoopSeqBit->second) {
+          UncondLoopSeqFlavoursObj.try_emplace(OP.first, OP.second);
+        }
+      }
+
       /* Attach the flavors object to the BB object. */
       BBObj["flavors"] = std::move(FlavoursObj);
+      BBObj["loop_seq_flavours"] = std::move(LoopSeqFlavoursObj);
+      BBObj["uncond_loop_seq_flavours"] = std::move(UncondLoopSeqFlavoursObj);
 
       /* Append the BB object to the basic_blocks array. */
       Blocks.push_back(std::move(BBObj));
@@ -169,9 +720,18 @@ struct LRSCCounts {
 
     /* Build the per-function JSON object with total and BB list. */
     llvm::json::Object FObj;
+
     FObj["total_lrsc_occurrences"] = functionLRSCCount;
     FObj["basic_blocks"] = std::move(Blocks);
 
+    FObj["total_loop_seq_conditional_lrsc_occurrences"] =
+        totalLoopSeqConditionalLRSCCount;
+
+    FObj["total_loop_seq_unconditional_lrsc_occurrences"] =
+        totalLoopSeqUnconditionalLRSCCount;
+
+    /* Attach LR -> terminating path information under this function. */
+    FObj["lr_paths"] = buildLRPathsJSON();
     /* Insert function object into the function map keyed by function name. */
     FuncMap.try_emplace(std::move(MF.getName()), std::move(FObj));
   }
@@ -180,14 +740,27 @@ struct LRSCCounts {
 // 1. PUBLIC DATA TYPES — plain structs, callers need these
 //----------------------------------------------------------------------
 /*--------------------------------------------------------------------------*/
+/* cycleFlavour: Categorizes the structural flavor of a detected CFG cycle.
+  - LR:      An exclusive LR-loop variant where the origin LR block loops back
+  into itself.
+  - LRSC:    A loop variant containing a valid, matched LR and SC pair along its
+  execution path.
+  - NORMAL:  A standard control flow cycle that contains no valid or matched
+             LR/SC sequence. Used as a fallback descriptor for regular loops. */
+enum class cycleFlavour : uint8_t {
+  LR,    // An exclusive LR-only block cycle
+  LRSC,  // A cycle encompassing a full, matched LR/SC pair
+  NORMAL // A standard CFG cycle without valid atomic bounds
+};
+/*--------------------------------------------------------------------------*/
 /* CycleEntry: Represents a single detected cycle in the CFG.
   - cyclePath:        Ordered list of basic block numbers forming the cycle.
-  - isLRCycle:        True if the origin LR block participates in this cycle.
+  - flavour:          The structural flavour of the cycle.
   - instructionCount: Estimated total instruction count along the cycle path.
 */
 struct CycleEntry {
   std::vector<std::string> cyclePath;
-  bool isLRCycle;
+  cycleFlavour flavour;
   int instructionCount;
 };
 
@@ -350,6 +923,10 @@ inline std::string stringifyOpcode(uint16_t opc) {
     return "SC_D_AQRL";
   case RISCV::SC_W_AQRL:
     return "SC_W_AQRL";
+  case RISCV::PseudoRET:
+    return "RETURN";
+  case RISCV::ECALL:
+    return "ECALL";
 
   default:
     return "";
@@ -377,6 +954,73 @@ inline llvm::StringRef stringifyWidth(LRSCWidth w) {
 }
 
 /*--------------------------------------------------------------------------*/
+/* stringifyCycleFlavour: Returns a human-readable string representation of a
+  cycleFlavour value for use in debug logging.
+  - LR:     Returns "LR"
+  - LRSC:   Returns "LRSC"
+  - NORMAL: Returns "NORMAL"
+  Used with LLVM_DEBUG to print cycleFlavour values via dbgs(),
+  since enum class disables implicit conversion to string. */
+inline std::string stringifyCycleFlavour(cycleFlavour flavour) {
+  switch (flavour) {
+  case cycleFlavour::LR:
+    return "LR";
+  case cycleFlavour::LRSC:
+    return "LRSC";
+  case cycleFlavour::NORMAL:
+    return "NORMAL";
+  }
+  return "Unknown";
+}
+
+/* stringifyPath: Returns a human-readable string representation of a
+  cycle path for use in debug logging and JSON output.
+  - Takes a vector of MachineBasicBlock path.
+  - Joins each element using " -> ".
+  - Returns one loop-path string to store in the terminating path JSON object.
+  Used when cycle paths are collected as vectors but need to be printed with
+  LLVM_DEBUG/dbgs() or stored as a single string in the JSON output. */
+inline std::string
+stringifyPath(const std::vector<MachineBasicBlock *> &CyclePath) {
+  std::string Result;
+  std::vector<std::string> StringCyclePath;
+  for (auto it = CyclePath.begin(); it != CyclePath.end(); ++it) {
+
+    StringCyclePath.push_back(std::to_string((*it)->getNumber()));
+  }
+  for (size_t i = 0; i < StringCyclePath.size(); ++i) {
+    Result += StringCyclePath[i];
+
+    if (i + 1 < CyclePath.size()) {
+      Result += " -> ";
+    }
+  }
+
+  return Result;
+}
+/* stringifyPath: Returns a human-readable string representation of a
+  cycle path for use in debug logging and JSON output.
+  - Takes a vector of basic-block path strings representing one CFG cycle.
+  - Joins each element using " -> ".
+  - Returns one loop-path string to store under "loops" in the terminating
+    path JSON object.
+  Used when cycle paths are collected as vectors but need to be printed with
+  LLVM_DEBUG/dbgs() or stored as a single string in the JSON output. */
+inline std::string stringifyPath(const std::vector<std::string> &CyclePath) {
+  std::string Result;
+
+  for (size_t i = 0; i < CyclePath.size(); ++i) {
+    Result += CyclePath[i];
+
+    if (i + 1 < CyclePath.size()) {
+      Result += " -> ";
+    }
+  }
+
+  return Result;
+}
+
+/*--------------------------------------------------------------------------*/
 /* getRegString: Returns the string representation of the register at a given
   operand index in MI, using the target register info from MF.
   Defaults to operand index 1 (the base register for LR/SC).
@@ -390,7 +1034,7 @@ inline llvm::StringRef stringifyWidth(LRSCWidth w) {
   - rso:    String stream backed by regStr; used to write the register name
             via the printReg streaming operator. */
 inline std::string getRegString(MachineInstr &MI, MachineFunction &MF,
-                         unsigned operandIdx = 1) {
+                                unsigned operandIdx = 1) {
   Register rs1 = MI.getOperand(operandIdx).getReg();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
   std::string regStr;
@@ -398,6 +1042,28 @@ inline std::string getRegString(MachineInstr &MI, MachineFunction &MF,
   rso << printReg(rs1, TRI);
   rso.flush();
   return regStr;
+}
+
+/*--------------------------------------------------------------------------*/
+/* blockContainsSC: Returns true if the given MachineBasicBlock contains
+   any SC instruction. */
+inline bool blockContainsSC(const MachineBasicBlock *MBB) {
+  for (const MachineInstr &MI : *MBB) {
+    if (isSC(MI.getOpcode()))
+      return true;
+  }
+  return false;
+}
+
+/*--------------------------------------------------------------------------*/
+/* blockContainsLR: Returns true if the given MachineBasicBlock contains
+   any LR instruction. */
+inline bool blockContainsLR(const MachineBasicBlock *MBB) {
+  for (const MachineInstr &MI : *MBB) {
+    if (isLR(MI.getOpcode()))
+      return true;
+  }
+  return false;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -442,6 +1108,7 @@ inline int getMBBInstrCount(const MachineBasicBlock *MBB) {
   }
   return count;
 }
+
 /*--------------------------------------------------------------------------*/
 /* dump: Prints all matches and cycles in a MatchResult to stderr.
 For each match: prints the LR base register, matched SC opcode, and
@@ -451,16 +1118,17 @@ inline void dump(const MatchResult &result) {
   LLVM_DEBUG({
     dbgs() << "=== Matches ===\n";
     for (auto &m : result.matches)
-      dbgs() << "LR: " << m.lrInstruction
-             << " SC: " << m.matchedSCInstruction
+      dbgs() << "LR: " << m.lrInstruction << " SC: " << m.matchedSCInstruction
              << " Distance: " << m.longestDistance << "\n";
 
     dbgs() << "=== Cycles ===\n";
     for (auto &c : result.cycles) {
       dbgs() << "Cycle: ";
-      for (auto &block : c.cyclePath)
+      for (auto &block : c.cyclePath) {
         dbgs() << block << " -> ";
-      dbgs() << (c.isLRCycle ? "[LR cycle]" : "[no LR]")
+      }
+
+      dbgs() << "[" << stringifyCycleFlavour(c.flavour) << "]"
              << " InstrCount: " << c.instructionCount << ", "
              << " BasicBlockCount: " << c.cyclePath.size() << "\n";
     }
@@ -505,13 +1173,14 @@ public:
                           result.cycles, and the current MatchTuple entry.
     - startIt:            Iterator to the instruction immediately after the LR;
                           passed to DFS as the starting scan position. */
-  MatchResult computeLRSCDistancesAndCycles(MachineFunction &MF) {
+  MatchResult computeLRSCDistancesAndCycles(MachineFunction &MF,
+                                            LRSCCounts &Counts) {
     /* Pull in lrsc:: helpers (isLR, isSC, getLRSCWidth, etc.) without
      * qualification. */
     using namespace lrsc;
     /* Maps (BasicBlock*, rs1Clobbered) → best instruction distance seen so far;
      * reset per LR. */
-    std::map<std::pair<MachineBasicBlock *, bool>, int> visitedDistance;
+    std::map<MachineBasicBlock *, int> visitedDistance;
     /* Running count of distinct blocks visited in the current DFS; reset per
      * LR. */
     uint8_t exploredBlockCount;
@@ -549,6 +1218,7 @@ public:
         LLVM_DEBUG(dbgs() << "  instr opcode: " << opc << "\n");
         /* Only proceed with DFS setup if this instruction is an LR variant. */
         if (isLR(opc)) {
+          LRSCCounts::LoopInfoList allLoopsForCurrentLR;
           /* Build the fixed search context for this LR: width qualifier, base
            * register, and origin block. */
           LRSCSearchMetaData searchMetaData{getLRSCWidth(opc),
@@ -568,21 +1238,28 @@ public:
           /* Placeholder for the LR/SC match result that DFS will populate if a
            * match is found. */
           MatchTuple currentEntry;
+          currentEntry.lrInstruction = stringifyOpcode(opc);
+          Counts.clearLRKey();
+          Counts.setLRKey(MBB, currentEntry.lrInstruction,
+                          searchMetaData.baseReg);
           /* Initialize mutable DFS state: rs1 not yet clobbered, distance
              starts at 1 (LR itself), depth starts at 0, referencing the shared
              visitedBlocksBuffer and visitedDistance. */
-          DFSTraversalState state{false, 1, 0, visitedBlocksBuffer,
-                                  visitedDistance};
+          DFSTraversalState state{// false,
+                                  1, 0, visitedBlocksBuffer, visitedDistance};
           /* Bundle output accumulators into DFSOutput so all recursive DFS
            * calls share them. */
           DFSOutput out{exploredBlockCount, longestDistance, result.cycles,
-                        currentEntry};
+                        currentEntry, allLoopsForCurrentLR};
           /* Advance past the LR instruction so DFS begins scanning from the
            * next instruction. */
           MachineBasicBlock::iterator startIt = ++MBBI;
           /* Launch the recursive DFS traversal from the instruction immediately
            * after the LR. */
-          DFS(&MBB, startIt, searchMetaData, state, out);
+          DFS(&MBB, startIt, searchMetaData, state, out, Counts);
+          /* After DFS finishes for this LR, all loops for this LR are known.
+             Recompute loop attachment for every terminating path. */
+          finalizeLoopsForCurrentLR(Counts, allLoopsForCurrentLR);
           /* Only record a match if DFS found at least one valid matching SC
            * instruction. */
           if (longestDistance != -1)
@@ -616,32 +1293,331 @@ private:
 
   /*--------------------------------------------------------------------------*/
   /* DFSTraversalState: Mutable state that changes as the DFS recurses.
-    - rs1Clobbered:       True if rs1 was redefined since the LR was seen.
+    - REMOVED: rs1Clobbered:       True if rs1 was redefined since the LR was
+    seen.
     - currentDistance:    Instruction count accumulated from the LR to now.
     - currentDepth:       Recursion depth; enforced against MaxDepth.
     - visitedBlocksBuffer: Ordered blocks on the current DFS path.
-    - visitedDistance:    Map from (block, rs1Clobbered) → best distance seen;
+    - visitedDistance:    Map from (block) → best distance seen;
                           used for revisit pruning. */
   struct DFSTraversalState {
-    bool rs1Clobbered;
+    // bool rs1Clobbered;
+    // bool memOpSeen;
     int currentDistance;
     int currentDepth;
     std::vector<MachineBasicBlock *> &visitedBlocksBuffer;
-    std::map<std::pair<MachineBasicBlock *, bool>, int> &visitedDistance;
+    std::map<MachineBasicBlock *, int> &visitedDistance;
   };
 
   /*--------------------------------------------------------------------------*/
   /* DFSOutput: Accumulators written to throughout the DFS traversal.
     - exploredBlockCount: Running count of distinct blocks visited.
     - longestDistance:    Maximum LR-to-SC distance found across all paths.
-    - cycles:             All detected CycleEntry objects.
+    - cycles:             cycles vector shared across all DFS calls to
+    accumulate detected cycles.
     - entry:              Updated when a valid LR/SC match is found. */
   struct DFSOutput {
     uint8_t &exploredBlockCount;
     int &longestDistance;
     std::vector<CycleEntry> &cycles;
     MatchTuple &entry;
+
+    LRSCCounts::LoopInfoList &allLoopsForCurrentLR;
   };
+
+  /*--------------------------------------------------------------------------*/
+  /* loopAlreadyInList: Returns true if Candidate is already present in Loops.
+   */
+  bool loopAlreadyInList(const LRSCCounts::LoopInfoList &Loops,
+                         const LRSCCounts::LoopInfo &Candidate) {
+    for (const auto &Loop : Loops) {
+      if (Loop.Path == Candidate.Path &&
+          Loop.CycleFlavour == Candidate.CycleFlavour)
+        return true;
+    }
+
+    return false;
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* canonicalizeCyclePath:
+    Normalizes a closed cycle path so rotated versions of the same cycle produce
+    the same string.
+
+    Example:
+      20 -> 22 -> 23 -> 24 -> 25 -> 26 -> 27 -> 20
+      22 -> 23 -> 24 -> 25 -> 26 -> 27 -> 20 -> 22
+
+    both become:
+      20 -> 22 -> 23 -> 24 -> 25 -> 26 -> 27 -> 20
+  */
+  std::vector<std::string>
+  canonicalizeCyclePath(const std::vector<std::string> &CyclePath) {
+    if (CyclePath.size() <= 2)
+      return CyclePath;
+
+    std::vector<std::string> Body = CyclePath;
+
+    /* Remove duplicate closing node. */
+    if (Body.front() == Body.back())
+      Body.pop_back();
+
+    if (Body.empty())
+      return CyclePath;
+
+    size_t BestIdx = 0;
+    unsigned BestBlock = std::stoul(Body[0]);
+
+    for (size_t I = 1; I < Body.size(); ++I) {
+      unsigned BlockNum = std::stoul(Body[I]);
+      if (BlockNum < BestBlock) {
+        BestBlock = BlockNum;
+        BestIdx = I;
+      }
+    }
+
+    std::vector<std::string> Canonical;
+
+    for (size_t Offset = 0; Offset < Body.size(); ++Offset) {
+      size_t Idx = (BestIdx + Offset) % Body.size();
+      Canonical.push_back(Body[Idx]);
+    }
+
+    /* Close the cycle again. */
+    Canonical.push_back(Canonical.front());
+
+    return Canonical;
+  }
+  /* addLoopForCurrentLR: Adds one detected cycle to the per-LR loop list.
+  - out:           DFS output object holding the allLoopsForCurrentLR list.
+  - detectedCycle: Raw detected cycle path as basic-block number strings.
+  - Flavour:       Classified cycle flavour: LR, LRSC, or NORMAL.
+  - NumInstr:      Estimated instruction count for the cycle.
+  Canonicalizes the cycle path first so rotated versions of the same cycle
+  map to the same string. If the same canonical loop already exists, keeps
+  the smaller NumInstr value. */
+  void addLoopForCurrentLR(DFSOutput &out,
+                           const std::vector<std::string> &detectedCycle,
+                           cycleFlavour Flavour, unsigned NumInstr) {
+
+    std::vector<std::string> CanonicalCycle =
+        canonicalizeCyclePath(detectedCycle);
+
+    LRSCCounts::LoopInfo Candidate{lrsc::stringifyPath(CanonicalCycle),
+                                   lrsc::stringifyCycleFlavour(Flavour),
+                                   NumInstr};
+
+    for (auto &Loop : out.allLoopsForCurrentLR) {
+      if (Loop.Path == Candidate.Path &&
+          Loop.CycleFlavour == Candidate.CycleFlavour) {
+        if (Candidate.NumInstr < Loop.NumInstr)
+          Loop.NumInstr = Candidate.NumInstr;
+        return;
+      }
+    }
+
+    out.allLoopsForCurrentLR.push_back(Candidate);
+  }
+  /*--------------------------------------------------------------------------*/
+  /* splitPathString: Splits a stringified CFG path into individual basic-block
+    number tokens.
+    - Path: String path formatted as "A -> B -> C".
+    Returns a vector containing each block number as a string.
+    Used by connected-loop collection helpers to compare path membership and
+    loop overlap by exact block token instead of substring matching. */
+  std::vector<std::string> splitPathString(const std::string &Path) {
+    std::vector<std::string> Blocks;
+
+    for (size_t i = 0; i < Path.size();) {
+      size_t Arrow = Path.find(" -> ", i);
+
+      if (Arrow == std::string::npos) {
+        std::string Token = Path.substr(i);
+        if (!Token.empty())
+          Blocks.push_back(Token);
+        break;
+      }
+
+      std::string Token = Path.substr(i, Arrow - i);
+      if (!Token.empty())
+        Blocks.push_back(Token);
+
+      i = Arrow + 4;
+    }
+
+    return Blocks;
+  }
+  /*--------------------------------------------------------------------------*/
+  /* pathContainsBlock: Returns true if Block exists in PathBlocks.
+    - PathBlocks: Vector of basic-block number strings.
+    - Block:      Basic-block number string to search for.
+    Used as the exact membership test for reachable block sets during connected
+    loop closure computation. */
+  bool pathContainsBlock(const std::vector<std::string> &PathBlocks,
+                         const std::string &Block) {
+    return std::find(PathBlocks.begin(), PathBlocks.end(), Block) !=
+           PathBlocks.end();
+  }
+  /*--------------------------------------------------------------------------*/
+  /* loopSharesAnyBlockWithBlockSet: Returns true if Loop shares at least one
+    basic block with the provided block set.
+    - Loop:     LoopInfo object whose Path field is checked.
+    - BlockSet: Current reachable block set for a terminating path.
+    Splits Loop.Path into block tokens and checks whether any loop block is
+    already reachable. This is the main overlap test used by connected-loop
+    closure. */
+  bool
+  loopSharesAnyBlockWithBlockSet(const LRSCCounts::LoopInfo &Loop,
+                                 const std::vector<std::string> &BlockSet) {
+    std::vector<std::string> LoopBlocks = splitPathString(Loop.Path);
+
+    for (const std::string &B : LoopBlocks) {
+      if (pathContainsBlock(BlockSet, B))
+        return true;
+    }
+
+    return false;
+  }
+  /*--------------------------------------------------------------------------*/
+  /* addLoopBlocksToBlockSet: Expands BlockSet by adding every block contained
+    in Loop.Path.
+    - Loop:     LoopInfo object whose path blocks become newly reachable.
+    - BlockSet: Mutable reachable block set being expanded.
+    Used after a loop is attached so loops connected to that loop can also be
+    discovered in later closure iterations. */
+  void addLoopBlocksToBlockSet(const LRSCCounts::LoopInfo &Loop,
+                               std::vector<std::string> &BlockSet) {
+    std::vector<std::string> LoopBlocks = splitPathString(Loop.Path);
+
+    for (const std::string &B : LoopBlocks) {
+      if (!pathContainsBlock(BlockSet, B))
+        BlockSet.push_back(B);
+    }
+  }
+  /*--------------------------------------------------------------------------*/
+  /* collectConnectedLoopsForTerminatingPath: Computes the connected loop set
+    for the currently active DFS terminating path.
+    - state: DFS traversal state containing the live visitedBlocksBuffer path.
+    - out:   DFS output containing all loops discovered so far for this LR.
+    Starts from the blocks in visitedBlocksBuffer, attaches loops that share
+    any reachable block, then expands the reachable set with each attached
+    loop's blocks until no more connected loops can be added. */
+  LRSCCounts::LoopInfoList
+  collectConnectedLoopsForTerminatingPath(const DFSTraversalState &state,
+                                          const DFSOutput &out) {
+    LRSCCounts::LoopInfoList Result;
+
+    std::vector<std::string> ReachableBlockSet;
+
+    for (MachineBasicBlock *PathBlock : state.visitedBlocksBuffer) {
+      ReachableBlockSet.push_back(std::to_string(PathBlock->getNumber()));
+    }
+    // To scan th blocks of the loops in the loops to add them to
+    // ReachableBlockSet.
+    bool Changed = true;
+
+    while (Changed) {
+      Changed = false;
+      /* Goes through all the recorded loops and:
+          1. It checks if the loop is either already in the list of connected
+         loops or if the loop does not share any block with the block set.
+          2. If none of those are true(the loop does not already exist and it
+         shares a block with the block set), it adds the loop blocks into
+         ReachableBlockSet, it pushes the loop into the Result(a list of loops),
+         and it switches Changed to true.*/
+      for (const auto &Loop : out.allLoopsForCurrentLR) {
+        if (loopAlreadyInList(Result, Loop) ||
+            !loopSharesAnyBlockWithBlockSet(Loop, ReachableBlockSet)) {
+          continue;
+        }
+
+        Result.push_back(Loop);
+        addLoopBlocksToBlockSet(Loop, ReachableBlockSet);
+        // A loop was added. We need to add its blocks to ReachableBlockSet.
+        Changed = true;
+      }
+    }
+
+    return Result;
+  }
+
+  /*--------------------------------------------------------------------------*/
+  /* updateTerminatingPathWithReachableLoops: Records a terminating path and
+    attaches all loops anchored at blocks on that path.
+    - Counts: A reference to the JSON object.
+    - state: For the current terminating path.
+    - out: For the loops detected so far. */
+  void updateTerminatingPathWithReachableLoops(LRSCCounts &Counts,
+                                               const DFSTraversalState &state,
+                                               const DFSOutput &out,
+                                               const std::string &Cause,
+                                               unsigned Distance) {
+    LRSCCounts::LoopInfoList LoopsForPath =
+        collectConnectedLoopsForTerminatingPath(state, out);
+
+    Counts.updateLRTerminatingPath(
+        lrsc::stringifyPath(state.visitedBlocksBuffer), Cause, Distance,
+        LoopsForPath);
+  }
+  /*--------------------------------------------------------------------------*/
+  /* collectConnectedLoopsForPathString: Computes the connected loop set for an
+    already-recorded terminating path string.
+    - TerminatingPath:       String representation of the terminating path,
+                             formatted as "A -> B -> C".
+    - AllLoopsForCurrentLR:  Complete list of loops detected while analyzing
+                             the current LR.
+    Starts from the blocks in TerminatingPath, attaches every loop that shares
+    at least one reachable block, then expands the reachable block set with the
+    blocks from each attached loop. Repeats until no more connected loops can
+    be added. Used after DFS finishes so terminating paths recorded early can
+    be updated using the complete per-LR loop list. */
+  LRSCCounts::LoopInfoList collectConnectedLoopsForPathString(
+      const std::string &TerminatingPath,
+      const LRSCCounts::LoopInfoList &AllLoopsForCurrentLR) {
+    LRSCCounts::LoopInfoList Result;
+
+    std::vector<std::string> ReachableBlockSet =
+        splitPathString(TerminatingPath);
+
+    bool Changed = true;
+
+    while (Changed) {
+      Changed = false;
+
+      for (const auto &Loop : AllLoopsForCurrentLR) {
+        if (loopAlreadyInList(Result, Loop) ||
+            !loopSharesAnyBlockWithBlockSet(Loop, ReachableBlockSet)) {
+          continue;
+        }
+
+        Result.push_back(Loop);
+        addLoopBlocksToBlockSet(Loop, ReachableBlockSet);
+        Changed = true;
+      }
+    }
+
+    return Result;
+  }
+  /*--------------------------------------------------------------------------*/
+  /* finalizeLoopsForCurrentLR:
+    After DFS finishes for one LR, all loops for that LR are known.
+    Recompute connected-loop closure for every terminating path of this LR and
+    replace the earlier incomplete loop lists. */
+  void finalizeLoopsForCurrentLR(
+      LRSCCounts &Counts,
+      const LRSCCounts::LoopInfoList &AllLoopsForCurrentLR) {
+    auto &TerminatingPaths = Counts.getCurrentLRTerminatingPaths();
+
+    for (auto &PathPair : TerminatingPaths) {
+      const std::string &TerminatingPath = PathPair.first;
+
+      LRSCCounts::LoopInfoList FinalLoops = collectConnectedLoopsForPathString(
+          TerminatingPath, AllLoopsForCurrentLR);
+
+      Counts.replaceLoopsForCurrentLRTerminatingPath(TerminatingPath,
+                                                     FinalLoops);
+    }
+  }
 
   /*--------------------------------------------------------------------------*/
   /* DFS: Recursive DFS over the CFG searching for a matching SC instruction.
@@ -716,35 +1692,52 @@ private:
                   during successor traversal logging.
     - nextState: Copy of state with currentDepth incremented by one; passed
                   to the recursive DFS call for each successor. */
-    void DFS(MachineBasicBlock *currentBlock,
-        MachineBasicBlock::iterator startIterator,
-        const LRSCSearchMetaData &searchMetaData, DFSTraversalState state,
-        DFSOutput &out) {
-    /* Pull in lrsc:: helpers (isLR, isSC, getLRSCWidth, etc.) without qualification. */
+  void DFS(MachineBasicBlock *currentBlock,
+           MachineBasicBlock::iterator startIterator,
+           const LRSCSearchMetaData &searchMetaData, DFSTraversalState state,
+           DFSOutput &out, LRSCCounts &Counts) {
+    /* Pull in lrsc:: helpers (isLR, isSC, getLRSCWidth, etc.) without
+     * qualification. */
     using namespace lrsc;
-    /* Log a header marking the start of a new DFS call for readability in debug output. */
+    /* Log a header marking the start of a new DFS call for readability in debug
+     * output. */
     LLVM_DEBUG(dbgs() << "\n=== DFS CALL ===\n");
     /* Log the block number of the basic block currently being scanned. */
-    LLVM_DEBUG(dbgs() << "  currentBlock    : " << currentBlock->getNumber() << "\n");
-    /* Log the block number of the block containing the LR instruction that launched this DFS. */
+    LLVM_DEBUG(dbgs() << "  currentBlock    : " << currentBlock->getNumber()
+                      << "\n");
+    /* Log the block number of the block containing the LR instruction that
+     * launched this DFS. */
     LLVM_DEBUG(dbgs() << "  originLRBlock   : "
                       << searchMetaData.originLRBlock->getNumber() << "\n");
-    /* Log the width qualifier (W/D/Unknown) of the LR instruction being matched. */
+    /* Log the width qualifier (W/D/Unknown) of the LR instruction being
+     * matched. */
     LLVM_DEBUG(dbgs() << "  lrscWidth       : "
-                      << lrsc::stringifyWidth(searchMetaData.lrscWidth) << "\n");
-    /* Log the base register (rs1) of the LR instruction that must be matched by the SC. */
-    LLVM_DEBUG(dbgs() << "  baseReg         : " << searchMetaData.baseReg << "\n");
-    /* Log whether rs1 has been redefined since the LR was seen, which would invalidate a match. */
-    LLVM_DEBUG(dbgs() << "  rs1Clobbered    : " << state.rs1Clobbered << "\n");
-    /* Log the instruction count accumulated from the LR to the current scan position. */
-    LLVM_DEBUG(dbgs() << "  currentDistance : " << state.currentDistance << "\n");
-    /* Log the current recursion depth to track how deep into the CFG this DFS call is. */
+                      << lrsc::stringifyWidth(searchMetaData.lrscWidth)
+                      << "\n");
+    /* Log the base register (rs1) of the LR instruction that must be matched by
+     * the SC. */
+    LLVM_DEBUG(dbgs() << "  baseReg         : " << searchMetaData.baseReg
+                      << "\n");
+    // /* Log whether rs1 has been redefined since the LR was seen, which would
+    // invalidate a match. */ LLVM_DEBUG(dbgs() << "  rs1Clobbered    : " <<
+    // state.rs1Clobbered << "\n");
+    /* Log whether a memory operation has been seen since the LR was seen. */
+    // LLVM_DEBUG(dbgs() << "  memOpSeen       : " << state.memOpSeen << "\n");
+    /* Log the instruction count accumulated from the LR to the current scan
+     * position. */
+    LLVM_DEBUG(dbgs() << "  currentDistance : " << state.currentDistance
+                      << "\n");
+    /* Log the current recursion depth to track how deep into the CFG this DFS
+     * call is. */
     LLVM_DEBUG(dbgs() << "  currentDepth    : " << state.currentDepth << "\n");
-    /* Log the number of distinct basic blocks visited so far in this DFS traversal. */
-    LLVM_DEBUG(dbgs() << "  exploredBlockCount: " << (int)out.exploredBlockCount << "\n");
+    /* Log the number of distinct basic blocks visited so far in this DFS
+     * traversal. */
+    LLVM_DEBUG(dbgs() << "  exploredBlockCount: " << (int)out.exploredBlockCount
+                      << "\n");
     /* Log the longest LR-to-SC distance found across all DFS paths so far. */
     LLVM_DEBUG(dbgs() << "  longestDistance : " << out.longestDistance << "\n");
-    /* Log the opening bracket then each block number on the current DFS path. */
+    /* Log the opening bracket then each block number on the current DFS path.
+     */
     LLVM_DEBUG(dbgs() << "  visitedBlocksBuffer: [");
     LLVM_DEBUG({
       for (auto *MBB : state.visitedBlocksBuffer)
@@ -752,7 +1745,8 @@ private:
     });
     /* Log the closing bracket of the visited blocks buffer. */
     LLVM_DEBUG(dbgs() << "]\n");
-    /* Log the opening bracket then each successor block number of the current block. */
+    /* Log the opening bracket then each successor block number of the current
+     * block. */
     LLVM_DEBUG(dbgs() << "  successors: [");
     LLVM_DEBUG({
       for (MachineBasicBlock *s : currentBlock->successors())
@@ -761,9 +1755,11 @@ private:
     /* Log the closing bracket of the successor list. */
     LLVM_DEBUG(dbgs() << "]\n");
 
-    /* Record the current block pointer onto the DFS path buffer before scanning or recursing. */
+    /* Record the current block pointer onto the DFS path buffer before scanning
+     * or recursing. */
     state.visitedBlocksBuffer.push_back(currentBlock);
-    /* Log the opening bracket then each block number in the path buffer after pushing current block. */
+    /* Log the opening bracket then each block number in the path buffer after
+     * pushing current block. */
     LLVM_DEBUG(dbgs() << "  pushed self, buffer now: [");
     LLVM_DEBUG({
       for (auto *MBB : state.visitedBlocksBuffer)
@@ -771,27 +1767,47 @@ private:
     });
     /* Log the closing bracket of the updated path buffer. */
     LLVM_DEBUG(dbgs() << "]\n");
-
     /* (21–28) Cycle detection */
-    /* Check each direct successor of the current block for a back-edge into the current path. */
+    /* Check each direct successor of the current block for a back-edge into the
+     * current path. */
     for (MachineBasicBlock *succ1 : currentBlock->successors()) {
-      /* Retain succ1's block number as a string for logging and cycle path construction only. */
+
+      if (!state.visitedBlocksBuffer.empty() && blockContainsLR(currentBlock)) {
+        continue;
+      }
+      /* Retain succ1's block number as a string for logging and cycle path
+       * construction only. */
       std::string succ1Name = std::to_string(succ1->getNumber());
-      /* Search the current path buffer for succ1 by pointer; a hit indicates a back-edge. */
+      /* Search the current path buffer for succ1 by pointer; a hit indicates a
+       * back-edge. */
       auto it1 = std::find(state.visitedBlocksBuffer.begin(),
-                          state.visitedBlocksBuffer.end(), succ1);
-      /* succ1 is already on the current path — a one-hop cycle back to it exists. */
+                           state.visitedBlocksBuffer.end(), succ1);
+      /* succ1 is already on the current path — a one-hop cycle back to it
+       * exists. (avoiding self infinite loops) */
       if (it1 != state.visitedBlocksBuffer.end()) {
-        /* Build the string cycle path by converting each pointer in the range to its block number. */
+        /* Build the string cycle path by converting each pointer in the range
+         * to its block number. */
         std::vector<std::string> detectedCycle;
-        for (auto it = it1; it != state.visitedBlocksBuffer.end(); ++it)
+        bool cycleIncludesSC = false;
+        int cycleInstructionCount = getMBBInstrCount(succ1);
+        for (auto it = it1; it != state.visitedBlocksBuffer.end(); ++it) {
           detectedCycle.push_back(std::to_string((*it)->getNumber()));
-        /* Close the cycle by appending succ1's number to show where it loops back to. */
+          cycleInstructionCount += getMBBInstrCount(*it);
+          if (blockContainsSC(*it)) {
+            LLVM_DEBUG(dbgs() << "  (There is an SC in this cycle)\n");
+            cycleIncludesSC = true;
+          }
+        }
+        /* Close the cycle by appending succ1's number to show where it loops
+         * back to. */
         detectedCycle.push_back(succ1Name);
-        /* Estimate cycle cost as succ1's instruction count plus distance accumulated so far. */
-        int cycleInstructionCount =
-            getMBBInstrCount(succ1) + state.currentDistance;
-        /* Log that a one-hop cycle was detected then log each block in its path. */
+        if (blockContainsSC(succ1)) {
+          LLVM_DEBUG(dbgs() << "  (There is an SC in this cycle)\n");
+          cycleIncludesSC = true;
+        }
+
+        /* Log that a one-hop cycle was detected then log each block in its
+         * path. */
         LLVM_DEBUG(dbgs() << "  CYCLE DETECTED (succ1): ");
         LLVM_DEBUG({
           for (auto &b : detectedCycle)
@@ -799,48 +1815,121 @@ private:
         });
         /* Log a newline after the cycle path. */
         LLVM_DEBUG(dbgs() << "\n");
-        /* Convert the origin LR block number to string for membership testing in the cycle. */
+        /* Convert the origin LR block number to string for membership testing
+         * in the cycle. */
         std::string lrBlockStr =
             std::to_string(searchMetaData.originLRBlock->getNumber());
-        /* A cycle is an LR cycle if the origin LR block is at the front or back of the path. */
+
+        /* A cycle is an LR cycle if the origin LR block is at the front or back
+         * of the path. */
         bool isLRCycle = (detectedCycle.front() == lrBlockStr ||
                           detectedCycle.back() == lrBlockStr);
-        /* Log that this cycle passes through the LR block if applicable. */
-        if (isLRCycle)
-          LLVM_DEBUG(dbgs() << "LR Cycle");
-        /* Check whether this exact cycle path has already been recorded to avoid duplicates. */
-        bool seen = alreadySeenCycle(out.cycles, detectedCycle);
+
+        /* Check whether this exact cycle path has already been recorded to
+         * avoid duplicates. */
+        bool seen = false;
         /* Only record the cycle if it is new and involves the LR block. */
-        if (!seen && isLRCycle)
-          out.cycles.push_back({detectedCycle, isLRCycle, cycleInstructionCount});
-        /* Log that this cycle was skipped because it was already recorded or not an LR cycle. */
-        else
+        if (!seen && !cycleIncludesSC && isLRCycle) {
+          /* Append a new CycleEntry to the output cycles vector with the
+           * detected path, cycle status, and instruction count. */
+          out.cycles.push_back(
+              {detectedCycle, cycleFlavour::LR, cycleInstructionCount});
+          /* Log that this cycle is and LR to itself cycle. */
+          LLVM_DEBUG(dbgs() << "LR Cycle\n");
+          addLoopForCurrentLR(out, detectedCycle, cycleFlavour::LR,
+                              cycleInstructionCount);
+        } else if (!seen && cycleIncludesSC && isLRCycle) {
+          /* Append a new CycleEntry to the output cycles vector with the
+           * detected path, cycle status, and instruction count. */
+          out.cycles.push_back(
+              {detectedCycle, cycleFlavour::LRSC, cycleInstructionCount});
+          /* Log that this cycle is and LR/SC cycle. */
+          LLVM_DEBUG(dbgs() << "LRSC Cycle\n");
+          addLoopForCurrentLR(out, detectedCycle, cycleFlavour::LRSC,
+                              cycleInstructionCount);
+        } else if (!seen && !cycleIncludesSC && !isLRCycle) {
+          /* Append a new CycleEntry to the output cycles vector with the
+           * detected path, cycle status, and instruction count. */
+          out.cycles.push_back(
+              {detectedCycle, cycleFlavour::NORMAL, cycleInstructionCount});
+          /* Log that this cycle is a normal cycle. */
+          LLVM_DEBUG(dbgs() << "Normal Cycle\n");
+          addLoopForCurrentLR(out, detectedCycle, cycleFlavour::NORMAL,
+                              cycleInstructionCount);
+        }
+
+        /* Log that this cycle was skipped because it was already recorded or
+           not an LR cycle. */
+        else {
           LLVM_DEBUG(dbgs() << "  (already seen, skipped)\n");
+        }
       }
 
-      /* Check each two-hop successor of the current block for a back-edge into the current path. */
+      if (succ1 == searchMetaData.originLRBlock) {
+        continue;
+      }
+
+      /* Check each two-hop successor of the current block for a back-edge into
+       * the current path. */
       for (MachineBasicBlock *succ2 : succ1->successors()) {
-        if (succ1 == succ2) continue;
-        /* Retain succ2's block number as a string for logging and cycle path construction only. */
+        bool isSuccTerminator = false;
+        for (const MachineInstr &MI : *succ2) {
+          if (isSC(MI.getOpcode()) ||
+              (isLR(MI.getOpcode()) &&
+               !(succ2 == searchMetaData.originLRBlock)) ||
+              MI.getOpcode() == RISCV::ECALL ||
+              MI.getOpcode() == RISCV::PseudoRET) {
+            isSuccTerminator = true;
+          }
+        }
+        if (isSuccTerminator) {
+          continue;
+        }
+        if (succ1 == succ2)
+          continue;
+        /* Retain succ2's block number as a string for logging and cycle path
+         * construction only. */
         std::string succ2Name = std::to_string(succ2->getNumber());
-        /* Search the current path buffer for succ2 by pointer; a hit indicates a two-hop back-edge. */
+        /* Search the current path buffer for succ2 by pointer; a hit indicates
+         * a two-hop back-edge. */
         auto it2 = std::find(state.visitedBlocksBuffer.begin(),
-                            state.visitedBlocksBuffer.end(), succ2);
-        /* succ2 is already on the current path — a two-hop cycle through succ1 exists. */
+                             state.visitedBlocksBuffer.end(), succ2);
+        /* succ2 is already on the current path — a two-hop cycle through succ1
+         * exists. */
         if (it2 != state.visitedBlocksBuffer.end()) {
-          /* Build the string cycle path by converting each pointer in the range to its block number. */
+          /* Build the string cycle path by converting each pointer in the range
+           * to its block number. */
           std::vector<std::string> detectedCycle;
-          for (auto it = it2; it != state.visitedBlocksBuffer.end(); ++it)
+          bool cycleIncludesSC = false;
+          int cycleInstructionCount =
+              (getMBBInstrCount(succ1) + getMBBInstrCount(succ2));
+          for (auto it = it2; it != state.visitedBlocksBuffer.end(); ++it) {
             detectedCycle.push_back(std::to_string((*it)->getNumber()));
+            cycleInstructionCount += getMBBInstrCount(*it);
+            if (blockContainsSC(*it)) {
+              LLVM_DEBUG(dbgs() << "  (There is an SC in this cycle)\n");
+              cycleIncludesSC = true;
+            }
+          }
           /* Extend the cycle path through succ1 as the intermediate hop. */
           detectedCycle.push_back(succ1Name);
-          /* Close the cycle by appending succ2's number to show where it loops back to. */
+          if (blockContainsSC(succ1)) {
+            LLVM_DEBUG(dbgs() << "  (There is an SC in this cycle)\n");
+            cycleIncludesSC = true;
+          }
+
+          /* Close the cycle by appending succ2's number to show where it loops
+           * back to. */
           detectedCycle.push_back(succ2Name);
-          /* Estimate two-hop cycle cost as succ1 + succ2 instruction counts plus current distance. */
-          int cycleInstructionCount = getMBBInstrCount(succ1) +
-                                      getMBBInstrCount(succ2) +
-                                      state.currentDistance;
-          /* Log that a two-hop cycle was detected then log each block in its path. */
+          if (blockContainsSC(succ2)) {
+            LLVM_DEBUG(dbgs() << "  (There is an SC in this cycle)\n");
+            cycleIncludesSC = true;
+          }
+          /* Estimate two-hop cycle cost as succ1 + succ2 instruction counts
+           * plus current distance. */
+
+          /* Log that a two-hop cycle was detected then log each block in its
+           * path. */
           LLVM_DEBUG(dbgs() << "  CYCLE DETECTED (succ2): ");
           LLVM_DEBUG({
             for (auto &b : detectedCycle)
@@ -848,52 +1937,87 @@ private:
           });
           /* Log a newline after the two-hop cycle path. */
           LLVM_DEBUG(dbgs() << "\n");
-          /* Convert the origin LR block number to string for membership testing in the cycle. */
+          /* Convert the origin LR block number to string for membership testing
+           * in the cycle. */
           std::string lrBlockStr =
               std::to_string(searchMetaData.originLRBlock->getNumber());
-          /* A cycle is an LR cycle if the origin LR block is at the front or back of the path. */
+
+          /* A cycle is an LR cycle if the origin LR block is at the front or
+           * back of the path. */
           bool isLRCycle = (detectedCycle.front() == lrBlockStr ||
                             detectedCycle.back() == lrBlockStr);
-          /* Log that this two-hop cycle passes through the LR block if applicable. */
-          if (isLRCycle)
+
+          /* Check whether this exact two-hop cycle path has already been
+           * recorded. */
+          bool seen = false;
+          /* Only record the two-hop cycle if it is new and involves the LR
+           * block. */
+          if (!seen && !cycleIncludesSC && isLRCycle) {
+            /* Append a new CycleEntry to the output cycles vector with the
+             * detected path, cycle status, and instruction count. */
+            out.cycles.push_back(
+                {detectedCycle, cycleFlavour::LR, cycleInstructionCount});
+            /* Log that this cycle is and LR to itself cycle. */
             LLVM_DEBUG(dbgs() << "LR Cycle");
-          /* Check whether this exact two-hop cycle path has already been recorded. */
-          bool seen = alreadySeenCycle(out.cycles, detectedCycle);
-          /* Only record the two-hop cycle if it is new and involves the LR block. */
-          if (!seen && isLRCycle)
-            out.cycles.push_back({detectedCycle, isLRCycle, cycleInstructionCount});
-          /* Log that this two-hop cycle was skipped because it was already recorded. */
-          else
-            LLVM_DEBUG(dbgs() << "  (already seen, skipped)\n");
+            addLoopForCurrentLR(out, detectedCycle, cycleFlavour::LR,
+                                cycleInstructionCount);
+          } else if (!seen && cycleIncludesSC && isLRCycle) {
+            /* Append a new CycleEntry to the output cycles vector with the
+             * detected path, cycle status, and instruction count. */
+            out.cycles.push_back(
+                {detectedCycle, cycleFlavour::LRSC, cycleInstructionCount});
+            /* Log that this cycle is and LR/SC cycle. */
+            LLVM_DEBUG(dbgs() << "LRSC Cycle");
+            addLoopForCurrentLR(out, detectedCycle, cycleFlavour::LRSC,
+                                cycleInstructionCount);
+          } else if (!seen && !cycleIncludesSC && !isLRCycle) {
+            /* Append a new CycleEntry to the output cycles vector with the
+             * detected path, cycle status, and instruction count. */
+            out.cycles.push_back(
+                {detectedCycle, cycleFlavour::NORMAL, cycleInstructionCount});
+            /* Log that this cycle is a normal cycle. */
+            LLVM_DEBUG(dbgs() << "Normal Cycle");
+            addLoopForCurrentLR(out, detectedCycle, cycleFlavour::NORMAL,
+                                cycleInstructionCount);
+          }
         }
       }
     }
 
     /* (30–32) Revisit pruning */
-    /* Build the pruning key from (currentBlock, rs1Clobbered) to distinguish clobbered visits. */
-    auto key = std::make_pair(currentBlock, state.rs1Clobbered);
-    /* Look up whether this (block, clobbered) pair has been visited before. */
+    // /* Build the pruning key from (currentBlock, rs1Clobbered) to distinguish
+    // clobbered visits. */ auto key = std::make_pair(currentBlock,
+    // state.rs1Clobbered);
+    /* Build the pruning key from (currentBlock, memOpSeen) to distinguish
+     * visits. */
+    auto key = currentBlock;
+    // /* Look up whether this (block, clobbered) pair has been visited before. */
     auto vit = state.visitedDistance.find(key);
-    /* If visited at equal or greater distance this path cannot improve longestDistance so prune. */
+    // /* If visited at equal or greater distance this path cannot improve
+    //  * longestDistance so prune. */
     if (vit != state.visitedDistance.end() &&
-        vit->second >= state.currentDistance) {
-      /* Log that this DFS path is being pruned due to a previously seen better or equal visit. */
-      LLVM_DEBUG(dbgs() << "  RETURN: revisit pruning\n");
-      /* Remove the current block pointer from the path buffer before returning to restore path state. */
-      state.visitedBlocksBuffer.pop_back();
-      return;
+         vit->second >= state.currentDistance) {
+    //   /* Log that this DFS path is being pruned due to a previously seen better
+    //    * or equal visit. */
+       LLVM_DEBUG(dbgs() << "  RETURN: revisit pruning\n");
+    //   /* Remove the current block pointer from the path buffer before returning
+    //    * to restore path state. */
+       state.visitedBlocksBuffer.pop_back();
+       return;
     }
 
-    /* Record the best distance seen so far for this (block, clobbered) pair for future pruning. */
+    // /* Record the best distance seen so far for this (block, clobbered) pair for
+    //  * future pruning. */
     state.visitedDistance[key] = state.currentDistance;
-    /* Increment the explored block counter now that this block is being fully scanned. */
+    /* Increment the explored block counter now that this block is being fully
+     * scanned. */
     out.exploredBlockCount++;
 
     /* (35–47) Scan instructions */
     /* Scan each instruction in currentBlock starting from startIterator. */
     for (MachineBasicBlock::iterator MBBI = startIterator,
-                                    E = currentBlock->end();
-        MBBI != E; ++MBBI) {
+                                     E = currentBlock->end();
+         MBBI != E; ++MBBI) {
       /* Extract the opcode of the current instruction for classification. */
       uint16_t opc = MBBI->getOpcode();
       /* Log the raw opcode value of the current instruction being scanned. */
@@ -906,152 +2030,208 @@ private:
         /* Log the distance at the point where the nested LR was encountered. */
         LLVM_DEBUG(dbgs() << "  found LR, currentDistance: "
                           << state.currentDistance << "\n");
-        /* If the nested LR is in the same block as the original LR this is a self-cycle. */
+        /* If the nested LR is in the same block as the original LR this is a
+         * self-cycle. */
         if (currentBlock == searchMetaData.originLRBlock) {
           /* Log that a self-cycle was detected in the origin LR block. */
-          LLVM_DEBUG(dbgs() << "  LR self cycle detected\n");
-          /* Convert each block pointer in the path buffer to its block number string for the cycle entry. */
+          LLVM_DEBUG(dbgs() << "LR Traversal Distance:" << state.currentDistance
+                            << "  ,LR self\n");
+          updateTerminatingPathWithReachableLoops(Counts, state, out, "LR Self",
+                                                  state.currentDistance);
+          /* Convert each block pointer in the path buffer to its block number
+           * string for the cycle entry. */
           std::vector<std::string> lrSelfCycle;
-          for (auto *MBB : state.visitedBlocksBuffer)
+          for (auto *MBB : state.visitedBlocksBuffer) {
             lrSelfCycle.push_back(std::to_string(MBB->getNumber()));
-          /* Remove any previously recorded supercycles that contain the self-cycle path
-            since the self-cycle is the tightest and most accurate representation. */
+          }
+
+          /* Remove any previously recorded supercycles that contain the
+            self-cycle path since the self-cycle is the tightest and most
+            accurate representation. */
           out.cycles.erase(std::remove_if(out.cycles.begin(), out.cycles.end(),
                                           [&](const CycleEntry &c) {
                                             return std::search(
-                                                      c.cyclePath.begin(),
-                                                      c.cyclePath.end(),
-                                                      lrSelfCycle.begin(),
-                                                      lrSelfCycle.end()) !=
-                                                  c.cyclePath.end();
+                                                       c.cyclePath.begin(),
+                                                       c.cyclePath.end(),
+                                                       lrSelfCycle.begin(),
+                                                       lrSelfCycle.end()) !=
+                                                   c.cyclePath.end();
                                           }),
-                          out.cycles.end());
+                           out.cycles.end());
           /* Log each block number in the self-cycle path. */
           LLVM_DEBUG({
             for (auto &b : lrSelfCycle)
               dbgs() << b << " -> ";
           });
-          /* Record the self-cycle with isLRCycle=true and the current distance as cost. */
-          out.cycles.push_back({lrSelfCycle, true, state.currentDistance});
-          /* Remove the current block pointer from the path buffer before returning. */
+          /* Record the self-cycle with isLRCycle=true and the current distance
+           * as cost. */
+          out.cycles.push_back(
+              {lrSelfCycle, cycleFlavour::LR, state.currentDistance});
+          /* Remove the current block pointer from the path buffer before
+           * returning. */
           state.visitedBlocksBuffer.pop_back();
           return;
         }
-        /* Remove the current block pointer from the path buffer before returning. */
+        LLVM_DEBUG(dbgs() << "LR Traversal Distance:" << state.currentDistance
+                          << "   ,Another LR\n");
+        updateTerminatingPathWithReachableLoops(
+            Counts, state, out, "Another LR", state.currentDistance);
+        /* Remove the current block pointer from the path buffer before
+         * returning. */
         state.visitedBlocksBuffer.pop_back();
         return;
       }
 
-      /* Check if the current instruction redefines rs1 — invalidates any future SC match. */
-      if (defsReg(*MBBI, searchMetaData.baseReg)) {
-        /* Count the clobbering instruction as one step in the distance. */
-        state.currentDistance++;
-        /* Log the distance at the point where rs1 was clobbered. */
-        LLVM_DEBUG(dbgs() << "  rs1 clobbered at distance: "
-                          << state.currentDistance << "\n");
-        /* Mark rs1 as clobbered so the SC match check will reject any SC on this path. */
-        state.rs1Clobbered = true;
-        /* Remove the current block pointer from the path buffer before returning. */
-        state.visitedBlocksBuffer.pop_back();
-        return;
-      }
+      /* Check if the current instruction redefines rs1 — invalidates any future
+       * SC match. */
+      // if (defsReg(*MBBI, searchMetaData.baseReg)) {
+      //   /* Count the clobbering instruction as one step in the distance. */
+      //   state.currentDistance++;
+      //   /* Log the distance at the point where rs1 was clobbered. */
+      //   LLVM_DEBUG(dbgs() << "  rs1 clobbered at distance: "
+      //                     << state.currentDistance << "\n");
+      //   /* Mark rs1 as clobbered so the SC match check will reject any SC on
+      //   this path. */ state.rs1Clobbered = true;
+      //   /* Remove the current block pointer from the path buffer before
+      //   returning. */ state.visitedBlocksBuffer.pop_back(); return;
+      // }
+      // if (MBBI->mayLoadOrStore() && !isSC(MBBI->getOpcode())) {
+      //   /* Count the memory instruction as one step in the distance. */
+      //   state.currentDistance++;
+      //   /* Log the distance at the point where a memory instruction was
+      //   encountered. */ LLVM_DEBUG(dbgs() << "  memory instr,
+      //   currentDistance: "
+      //                     << state.currentDistance << "\n");
+      //   state.memOpSeen = true;
+      //    /* Remove the current block pointer from the path buffer before
+      //    returning. */
+      //   state.visitedBlocksBuffer.pop_back();
+      //   return;
+      // }
 
-      /* An SC instruction was found — check if it is a valid match for the origin LR. */
+      /* An SC instruction was found — check if it is a valid match for the
+       * origin LR. */
       if (isSC(opc)) {
         /* Log that an SC was found and is being evaluated for a match. */
         LLVM_DEBUG(dbgs() << "  found SC, checking match\n");
-        /* Log whether the SC's width qualifier matches the LR's width qualifier. */
+        /* Log whether the SC's width qualifier matches the LR's width
+         * qualifier. */
         LLVM_DEBUG(dbgs() << "  width match: "
-                          << (getLRSCWidth(opc) == searchMetaData.lrscWidth) << "\n");
-        /* Log whether the SC's base register (operand 2) matches the LR's base register. */
-        LLVM_DEBUG(dbgs() << "  reg match: "
-                          << (getRegString(*MBBI, *currentBlock->getParent(), 2) ==
-                              searchMetaData.baseReg)
+                          << (getLRSCWidth(opc) == searchMetaData.lrscWidth)
                           << "\n");
-        /* Log whether rs1 has not been clobbered on this path, required for a valid match. */
-        LLVM_DEBUG(dbgs() << "  not clobbered: " << (!state.rs1Clobbered) << "\n");
-        /* All three conditions must hold: widths match, base registers match, rs1 not clobbered. */
+        /* Log whether the SC's base register (operand 2) matches the LR's base
+         * register. */
+        LLVM_DEBUG(dbgs() << "  reg match: "
+                          << (getRegString(*MBBI, *currentBlock->getParent(),
+                                           2) == searchMetaData.baseReg)
+                          << "\n");
+        // /* Log whether rs1 has not been clobbered on this path, required for
+        // a valid match. */ LLVM_DEBUG(dbgs() << "  not clobbered: " <<
+        // (!state.rs1Clobbered) << "\n");
+        /* Log whether a memory operation has not been seen on this path. */
+        // LLVM_DEBUG(dbgs() << "  no mem op seen: " << (!state.memOpSeen) <<
+        // "\n");
+        /* All three conditions must hold: widths match, base registers match,
+         * rs1 not clobbered. */
         if (getLRSCWidth(opc) == searchMetaData.lrscWidth &&
             searchMetaData.lrscWidth != LRSCWidth::Unknown &&
             getRegString(*MBBI, *currentBlock->getParent(), 2) ==
-                searchMetaData.baseReg &&
-            state.rs1Clobbered == false) {
-          /* Update the longest distance if this path's distance exceeds the current best. */
+                searchMetaData.baseReg) {
+          /* Update the longest distance if this path's distance exceeds the
+           * current best. */
           out.longestDistance =
               std::max(out.longestDistance, state.currentDistance);
           /* Log the updated longest distance after a successful LR/SC match. */
+          LLVM_DEBUG(dbgs() << "LR Traversal Distance:" << state.currentDistance
+                            << "   ,SC Match\n");
           LLVM_DEBUG(dbgs() << "  MATCH! longestDistance: "
                             << out.longestDistance << "\n");
+          updateTerminatingPathWithReachableLoops(
+              Counts, state, out, "SC Match", state.currentDistance);
           /* Record the LR's base register in the match entry. */
-          out.entry.lrInstruction = searchMetaData.baseReg;
+          out.entry.lrInstruction += ":";
+          out.entry.lrInstruction += searchMetaData.baseReg;
+
           /* Record the matched SC's opcode name in the match entry. */
           out.entry.matchedSCInstruction = stringifyOpcode(opc);
-          /* Sync the match entry's distance field with the updated longest distance. */
+          /* Sync the match entry's distance field with the updated longest
+           * distance. */
           out.entry.longestDistance = out.longestDistance;
         }
-        /* Remove the current block pointer from the path buffer before returning. */
+        /* Remove the current block pointer from the path buffer before
+         * returning. */
         state.visitedBlocksBuffer.pop_back();
         return;
       }
 
-      /* Count this non-LR non-SC non-clobbering instruction as one step in the distance. */
+      if (opc == RISCV::ECALL || opc == RISCV::PseudoRET) {
+
+        LLVM_DEBUG(dbgs() << "LR Traversal Distance:" << state.currentDistance
+                          << "   ," << stringifyOpcode(opc) << "\n");
+        /* Count this non-LR non-SC  as one step in the distance. */
+        state.currentDistance++;
+        updateTerminatingPathWithReachableLoops(
+            Counts, state, out, stringifyOpcode(opc), state.currentDistance);
+        /* Remove the current block pointer from the path buffer before
+         * returning. */
+        state.visitedBlocksBuffer.pop_back();
+        return;
+      }
+      /* Count this non-LR non-SC  as one step in the distance. */
       state.currentDistance++;
 
-      /* A terminator ends the instruction scan; successors handle control flow. */
+      /* A terminator ends the instruction scan; successors handle control flow.
+       */
       if (MBBI->isTerminator()) {
-        /* Log that the terminator was reached and the instruction scan loop is ending. */
+        /* Log that the terminator was reached and the instruction scan loop is
+         * ending. */
         LLVM_DEBUG(dbgs() << "  terminator reached, breaking\n");
         break;
       }
     }
 
     /* (48–49) Recurse into successors */
-    /* After exhausting the current block's instructions recurse into each CFG successor. */
+    /* After exhausting the current block's instructions recurse into each CFG
+     * successor. */
     for (MachineBasicBlock *succ : currentBlock->successors()) {
       /* Retain the successor's block number as a string for logging only. */
       std::string succName = std::to_string(succ->getNumber());
-      /* Check if the successor pointer is already on the current DFS path to avoid redundant recursion. */
+      /* Check if the successor pointer is already on the current DFS path to
+       * avoid redundant recursion. */
       if (std::find(state.visitedBlocksBuffer.begin(),
                     state.visitedBlocksBuffer.end(),
                     succ) != state.visitedBlocksBuffer.end()) {
-        /* Skip the successor only if it is not the origin LR block — back-edges to the LR
-          block are allowed because they represent the retry loop we are trying to detect. */
+        /* Skip the successor only if it is not the origin LR block — back-edges
+          to the LR block are allowed because they represent the retry loop we
+          are trying to detect. */
         if (succ != searchMetaData.originLRBlock) {
-          /* Log that this successor is being skipped because it is already on the path. */
-          LLVM_DEBUG(dbgs() << "  SKIP succ " << succName << " (already in path)\n");
+          /* Log that this successor is being skipped because it is already on
+           * the path. */
+          LLVM_DEBUG(dbgs()
+                     << "  SKIP succ " << succName << " (already in path)\n");
           continue;
         }
       }
       /* Log that the DFS is about to recurse into this successor block. */
       LLVM_DEBUG(dbgs() << "  recursing into succ " << succName << "\n");
-      /* Build the next recursion's state inheriting current clobbered/distance/depth values
-        and incrementing depth by one; visitedBlocksBuffer and visitedDistance are shared. */
-      DFSTraversalState nextState{
-          state.rs1Clobbered, state.currentDistance, state.currentDepth + 1,
-          state.visitedBlocksBuffer, state.visitedDistance};
+      /* Build the next recursion's state inheriting current
+        memOpSeen/distance/depth values and incrementing depth by one;
+        visitedBlocksBuffer and visitedDistance are shared. */
+      DFSTraversalState nextState{// state.memOpSeen,
+                                  state.currentDistance, state.currentDepth + 1,
+                                  state.visitedBlocksBuffer,
+                                  state.visitedDistance};
       /* Recurse into the successor starting from its first instruction. */
-      DFS(succ, succ->begin(), searchMetaData, nextState, out);
+      DFS(succ, succ->begin(), searchMetaData, nextState, out, Counts);
     }
 
     /* Log that the DFS is backtracking out of the current block. */
-    LLVM_DEBUG(dbgs() << "  backtrack from " << currentBlock->getNumber() << "\n");
-    /* Remove the current block pointer from the path buffer to restore the path state for the caller. */
+    LLVM_DEBUG(dbgs() << "  backtrack from " << currentBlock->getNumber()
+                      << "\n");
+    /* Remove the current block pointer from the path buffer to restore the path
+     * state for the caller. */
     state.visitedBlocksBuffer.pop_back();
   }
-    /*--------------------------------------------------------------------------*/
-    /* alreadySeenCycle: Returns true if detectedCycle already exists in cycles.
-      Used to guard against inserting duplicate cycle entries into the cycles
-      accumulator during DFS traversal.
-      - cycles:        The current list of detected cycles in DFSOutput.
-      - detectedCycle: The candidate cycle path to check for duplicates. */
-    bool alreadySeenCycle(const std::vector<CycleEntry> &cycles,
-                          const std::vector<std::string> &detectedCycle) {
-      for (const auto &c : cycles) {
-        if (c.cyclePath == detectedCycle)
-          return true;
-      }
-      return false;
-    }
-  };
+};
 
 } // namespace utils
