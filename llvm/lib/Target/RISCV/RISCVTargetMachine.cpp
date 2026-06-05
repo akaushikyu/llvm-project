@@ -603,18 +603,10 @@ void RISCVPassConfig::addPreEmitPass2() {
   if (EnableCFIInstrInserter)
     addPass(createCFIInstrInserter());
 
-
+  // add pass to count LR/SC instruction pairs...
+  addPass(createRISCVInsertBNERDSCPass());
   addPass(createRISCVExpandINLINEASMPass());
-    // add pass to count LR/SC instruction pairs...
-  // Expand PseudoBNE branches to a canonical form .
-  addPass(createRISCVPseudoBNEBranchExpansionPass());
   addPass(createRISCVCountLRSCPass());
-  if (DumpLRSCMachineCFG) {
-    addPass(&MachineCFGPrinterID);
-  }
-  if (RunBnerd) {
-    addPass(createRISCVInsertBNERDSCPass());
-  }
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
