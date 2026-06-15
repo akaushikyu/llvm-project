@@ -146,6 +146,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVRedundantCopyEliminationPass(*PR);
   initializeRISCVAsmPrinterPass(*PR);
   initializeRISCVPromoteConstantPass(*PR);
+  initializeRISCVExpandINLINEASMPass(*PR);
   initializeRISCVCountLRSCPass(*PR);
   initializeRISCVInsertBNERDSCPass(*PR);
 }
