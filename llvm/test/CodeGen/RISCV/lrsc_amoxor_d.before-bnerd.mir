@@ -1,0 +1,843 @@
+# Test target:
+#   Targets lowering of one atomicrmw xor operation to its exact
+#   LR_D/SC_D machine sequence when ZAAMO is disabled. The original
+#   synthetic LR path must terminate at the generated LR as "Another LR", and
+#   the complete emitted MIR and LR/SC JSON statistics must match exactly.
+#
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: cp %s %t/lrsc_amoxor_d.before-bnerd.mir
+# RUN: cd %t && llc -mtriple=riscv64-unknown-elf \
+# RUN:   -run-pass=riscv-expand-inline-asm,riscv-count-lr-sc \
+# RUN:   -dump-insn-stats-json -verify-machineinstrs \
+# RUN:   lrsc_amoxor_d.before-bnerd.mir -o lrsc_amoxor_d.after-expand-count.mir
+# RUN: (echo __MIR_BOF__; cat %t/lrsc_amoxor_d.after-expand-count.mir; echo __MIR_EOF__) \
+# RUN:   | FileCheck %s --check-prefix=MIR --strict-whitespace
+# RUN: (echo __JSON_BOF__; cat %t/lrsc_amoxor_d.before-bnerd.mir.lrscStats.json; echo __JSON_EOF__) \
+# RUN:   | FileCheck %s --check-prefix=JSON --strict-whitespace
+#
+
+
+# MIR: {{^__MIR_BOF__$}}
+# MIR-NEXT: {{^--- \|$}}
+# MIR-NEXT: {{^  ; ModuleID = 'lrsc_amoxor_d\.before-bnerd\.mir'$}}
+# MIR-NEXT: {{^  source_filename = "lrsc_amoxor_d\.c"$}}
+# MIR-NEXT: {{^  target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"$}}
+# MIR-NEXT: {{^  target triple = "riscv64-unknown-unknown-elf"$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  @zaamo_value = dso_local global i64 0, align 8$}}
+# MIR-NEXT: {{^  @zaamo_result_sink = dso_local global i64 0, align 8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  ; Function Attrs: noinline nounwind optnone$}}
+# MIR-NEXT: {{^  define dso_local signext i32 @lrsc_amoxor_d\(ptr noundef %0, i32 noundef signext %1, i32 noundef signext %2, i32 noundef signext %3\) #0 \{$}}
+# MIR-NEXT: {{^    %5 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %6 = alloca ptr, align 8$}}
+# MIR-NEXT: {{^    %7 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %8 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %9 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %10 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %11 = alloca i32, align 4$}}
+# MIR-NEXT: {{^    %12 = alloca i64, align 8$}}
+# MIR-NEXT: {{^    %13 = alloca i64, align 8$}}
+# MIR-NEXT: {{^    %14 = alloca i64, align 8$}}
+# MIR-NEXT: {{^    store ptr %0, ptr %6, align 8$}}
+# MIR-NEXT: {{^    store i32 %1, ptr %7, align 4$}}
+# MIR-NEXT: {{^    store i32 %2, ptr %8, align 4$}}
+# MIR-NEXT: {{^    store i32 %3, ptr %9, align 4$}}
+# MIR-NEXT: {{^    %15 = load ptr, ptr %6, align 8$}}
+# MIR-NEXT: {{^    %16 = load i32, ptr %7, align 4$}}
+# MIR-NEXT: {{^    %17 = load i32, ptr %8, align 4$}}
+# MIR-NEXT: {{^    %18 = call \{ i32, i32 \} asm sideeffect "0:\\0A\\09lr\.w \$0, \(\$2\)\\0A\\09bne \$0, \$3, 1f\\0A\\09sc\.w \$1, \$4, \(\$2\)\\0A\\09bnez \$1, 0b\\0A\\091:\\0A\\09", "=&r,=&r,r,r,r,~\{memory\}"\(ptr %15, i32 %16, i32 %17\) #1, !srcloc !5$}}
+# MIR-NEXT: {{^    %19 = extractvalue \{ i32, i32 \} %18, 0$}}
+# MIR-NEXT: {{^    %20 = extractvalue \{ i32, i32 \} %18, 1$}}
+# MIR-NEXT: {{^    store i32 %19, ptr %10, align 4$}}
+# MIR-NEXT: {{^    store i32 %20, ptr %11, align 4$}}
+# MIR-NEXT: {{^    %21 = load i32, ptr %10, align 4$}}
+# MIR-NEXT: {{^    %22 = load i32, ptr %7, align 4$}}
+# MIR-NEXT: {{^    %23 = icmp eq i32 %21, %22$}}
+# MIR-NEXT: {{^    br i1 %23, label %24, label %29$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  24:                                               ; preds = %4$}}
+# MIR-NEXT: {{^    %25 = load i32, ptr %11, align 4$}}
+# MIR-NEXT: {{^    %26 = icmp eq i32 %25, 0$}}
+# MIR-NEXT: {{^    %27 = zext i1 %26 to i64$}}
+# MIR-NEXT: {{^    %28 = select i1 %26, i32 0, i32 -2$}}
+# MIR-NEXT: {{^    store i32 %28, ptr %5, align 4$}}
+# MIR-NEXT: {{^    br label %40$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  29:                                               ; preds = %4$}}
+# MIR-NEXT: {{^    %30 = load i32, ptr %9, align 4$}}
+# MIR-NEXT: {{^    %31 = icmp ne i32 %30, 0$}}
+# MIR-NEXT: {{^    br i1 %31, label %33, label %32$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  32:                                               ; preds = %29$}}
+# MIR-NEXT: {{^    store i32 -1, ptr %5, align 4$}}
+# MIR-NEXT: {{^    br label %40$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  33:                                               ; preds = %29$}}
+# MIR-NEXT: {{^    store i64 85, ptr %13, align 8$}}
+# MIR-NEXT: {{^    %34 = load i64, ptr %13, align 8$}}
+# MIR-NEXT: {{^    %35 = atomicrmw xor ptr @zaamo_value, i64 %34 acquire, align 8$}}
+# MIR-NEXT: {{^    store i64 %35, ptr %14, align 8$}}
+# MIR-NEXT: {{^    %36 = load i64, ptr %14, align 8$}}
+# MIR-NEXT: {{^    store i64 %36, ptr %12, align 8$}}
+# MIR-NEXT: {{^    %37 = load i64, ptr %12, align 8$}}
+# MIR-NEXT: {{^    %38 = load volatile i64, ptr @zaamo_result_sink, align 8$}}
+# MIR-NEXT: {{^    %39 = add i64 %38, %37$}}
+# MIR-NEXT: {{^    store volatile i64 %39, ptr @zaamo_result_sink, align 8$}}
+# MIR-NEXT: {{^    store i32 -3, ptr %5, align 4$}}
+# MIR-NEXT: {{^    br label %40$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  40:                                               ; preds = %33, %32, %24$}}
+# MIR-NEXT: {{^    %41 = load i32, ptr %5, align 4$}}
+# MIR-NEXT: {{^    ret i32 %41$}}
+# MIR-NEXT: {{^  \}$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  attributes #0 = \{ noinline nounwind optnone "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="generic-rv64" "target-features"="\+64bit,\+a,\+m,\+relax,\+zicsr,\+zifencei,-c,-d,-e,-experimental-zacas,-experimental-zcmop,-experimental-zfbfmin,-experimental-zicfilp,-experimental-zicfiss,-experimental-zimop,-experimental-ztso,-experimental-zvfbfmin,-experimental-zvfbfwma,-f,-h,-smaia,-smepmp,-ssaia,-svinval,-svnapot,-svpbmt,-v,-xcvalu,-xcvbi,-xcvbitmanip,-xcvelw,-xcvmac,-xcvmem,-xcvsimd,-xsfvcp,-xsfvfnrclipxfqf,-xsfvfwmaccqqq,-xsfvqmaccdod,-xsfvqmaccqoq,-xtheadba,-xtheadbb,-xtheadbs,-xtheadcmo,-xtheadcondmov,-xtheadfmemidx,-xtheadmac,-xtheadmemidx,-xtheadmempair,-xtheadsync,-xtheadvdot,-xventanacondops,-za128rs,-za64rs,-zawrs,-zba,-zbb,-zbc,-zbkb,-zbkc,-zbkx,-zbs,-zca,-zcb,-zcd,-zce,-zcf,-zcmp,-zcmt,-zdinx,-zfa,-zfh,-zfhmin,-zfinx,-zhinx,-zhinxmin,-zic64b,-zicbom,-zicbop,-zicboz,-ziccamoa,-ziccif,-zicclsm,-ziccrse,-zicntr,-zicond,-zihintntl,-zihintpause,-zihpm,-zk,-zkn,-zknd,-zkne,-zknh,-zkr,-zks,-zksed,-zksh,-zkt,-zmmul,-zvbb,-zvbc,-zve32f,-zve32x,-zve64d,-zve64f,-zve64x,-zvfh,-zvfhmin,-zvkb,-zvkg,-zvkn,-zvknc,-zvkned,-zvkng,-zvknha,-zvknhb,-zvks,-zvksc,-zvksed,-zvksg,-zvksh,-zvkt,-zvl1024b,-zvl128b,-zvl16384b,-zvl2048b,-zvl256b,-zvl32768b,-zvl32b,-zvl4096b,-zvl512b,-zvl64b,-zvl65536b,-zvl8192b,\+a,-zaamo" \}$}}
+# MIR-NEXT: {{^  attributes #1 = \{ nounwind \}$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  !llvm\.module\.flags = !\{!0, !1, !2, !3\}$}}
+# MIR-NEXT: {{^  !llvm\.ident = !\{!4\}$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  !0 = !\{i32 1, !"wchar_size", i32 4\}$}}
+# MIR-NEXT: {{^  !1 = !\{i32 1, !"target-abi", !"lp64"\}$}}
+# MIR-NEXT: {{^  !2 = !\{i32 7, !"frame-pointer", i32 2\}$}}
+# MIR-NEXT: {{^  !3 = !\{i32 8, !"SmallDataLimit", i32 8\}$}}
+# MIR-NEXT: {{^  !4 = !\{!"Ubuntu clang version 18\.1\.3 \(1ubuntu1\)"\}$}}
+# MIR-NEXT: {{^  !5 = !\{i64 573, i64 578, i64 604, i64 631, i64 661, i64 685, i64 700\}$}}
+# MIR-NEXT: {{^\.\.\.$}}
+# MIR-NEXT: {{^---$}}
+# MIR-NEXT: {{^name:            lrsc_amoxor_d$}}
+# MIR-NEXT: {{^alignment:       4$}}
+# MIR-NEXT: {{^exposesReturnsTwice: false$}}
+# MIR-NEXT: {{^legalized:       false$}}
+# MIR-NEXT: {{^regBankSelected: false$}}
+# MIR-NEXT: {{^selected:        false$}}
+# MIR-NEXT: {{^failedISel:      false$}}
+# MIR-NEXT: {{^tracksRegLiveness: true$}}
+# MIR-NEXT: {{^hasWinCFI:       false$}}
+# MIR-NEXT: {{^noPhis:          true$}}
+# MIR-NEXT: {{^isSSA:           false$}}
+# MIR-NEXT: {{^noVRegs:         true$}}
+# MIR-NEXT: {{^hasFakeUses:     false$}}
+# MIR-NEXT: {{^callsEHReturn:   false$}}
+# MIR-NEXT: {{^callsUnwindInit: false$}}
+# MIR-NEXT: {{^hasEHContTarget: false$}}
+# MIR-NEXT: {{^hasEHScopes:     false$}}
+# MIR-NEXT: {{^hasEHFunclets:   false$}}
+# MIR-NEXT: {{^isOutlined:      false$}}
+# MIR-NEXT: {{^debugInstrRef:   false$}}
+# MIR-NEXT: {{^failsVerification: false$}}
+# MIR-NEXT: {{^tracksDebugUserValues: true$}}
+# MIR-NEXT: {{^registers:       \[\]$}}
+# MIR-NEXT: {{^liveins:$}}
+# MIR-NEXT: {{^  - \{ reg: '\$x10', virtual-reg: '' \}$}}
+# MIR-NEXT: {{^  - \{ reg: '\$x11', virtual-reg: '' \}$}}
+# MIR-NEXT: {{^  - \{ reg: '\$x12', virtual-reg: '' \}$}}
+# MIR-NEXT: {{^  - \{ reg: '\$x13', virtual-reg: '' \}$}}
+# MIR-NEXT: {{^frameInfo:$}}
+# MIR-NEXT: {{^  isFrameAddressTaken: false$}}
+# MIR-NEXT: {{^  isReturnAddressTaken: false$}}
+# MIR-NEXT: {{^  hasStackMap:     false$}}
+# MIR-NEXT: {{^  hasPatchPoint:   false$}}
+# MIR-NEXT: {{^  stackSize:       80$}}
+# MIR-NEXT: {{^  offsetAdjustment: 0$}}
+# MIR-NEXT: {{^  maxAlignment:    8$}}
+# MIR-NEXT: {{^  adjustsStack:    false$}}
+# MIR-NEXT: {{^  hasCalls:        false$}}
+# MIR-NEXT: {{^  stackProtector:  ''$}}
+# MIR-NEXT: {{^  functionContext: ''$}}
+# MIR-NEXT: {{^  maxCallFrameSize: 0$}}
+# MIR-NEXT: {{^  cvBytesOfCalleeSavedRegisters: 0$}}
+# MIR-NEXT: {{^  hasOpaqueSPAdjustment: false$}}
+# MIR-NEXT: {{^  hasVAStart:      false$}}
+# MIR-NEXT: {{^  hasMustTailInVarArgFunc: false$}}
+# MIR-NEXT: {{^  hasTailCall:     false$}}
+# MIR-NEXT: {{^  isCalleeSavedInfoValid: true$}}
+# MIR-NEXT: {{^  localFrameSize:  64$}}
+# MIR-NEXT: {{^fixedStack:      \[\]$}}
+# MIR-NEXT: {{^stack:$}}
+# MIR-NEXT: {{^  - \{ id: 0, name: '', type: default, offset: -20, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -4, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 1, name: '', type: default, offset: -32, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -16, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 2, name: '', type: default, offset: -36, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -20, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 3, name: '', type: default, offset: -40, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -24, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 4, name: '', type: default, offset: -44, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -28, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 5, name: '', type: default, offset: -48, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -32, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 6, name: '', type: default, offset: -52, size: 4, alignment: 4, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -36, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 7, name: '', type: default, offset: -64, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -48, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 8, name: '', type: default, offset: -72, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -56, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 9, name: '', type: default, offset: -80, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      local-offset: -64, debug-info-variable: '', debug-info-expression: '', $}}
+# MIR-NEXT: {{^      debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 10, name: '', type: spill-slot, offset: -8, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '\$x1', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      debug-info-variable: '', debug-info-expression: '', debug-info-location: '' \}$}}
+# MIR-NEXT: {{^  - \{ id: 11, name: '', type: spill-slot, offset: -16, size: 8, alignment: 8, $}}
+# MIR-NEXT: {{^      stack-id: default, callee-saved-register: '\$x8', callee-saved-restored: true, $}}
+# MIR-NEXT: {{^      debug-info-variable: '', debug-info-expression: '', debug-info-location: '' \}$}}
+# MIR-NEXT: {{^entry_values:    \[\]$}}
+# MIR-NEXT: {{^callSites:       \[\]$}}
+# MIR-NEXT: {{^debugValueSubstitutions: \[\]$}}
+# MIR-NEXT: {{^constants:       \[\]$}}
+# MIR-NEXT: {{^machineFunctionInfo:$}}
+# MIR-NEXT: {{^  varArgsFrameIndex: 0$}}
+# MIR-NEXT: {{^  varArgsSaveSize: 0$}}
+# MIR-NEXT: {{^body:             \|$}}
+# MIR-NEXT: {{^  bb\.0 \(%ir-block\.4\):$}}
+# MIR-NEXT: {{^    successors: %bb\.8\(0x80000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    \$x2 = frame-setup ADDI \$x2, -80$}}
+# MIR-NEXT: {{^    frame-setup SD killed \$x1, \$x2, 72 :: \(store \(s64\) into %stack\.10\)$}}
+# MIR-NEXT: {{^    frame-setup SD killed \$x8, \$x2, 64 :: \(store \(s64\) into %stack\.11\)$}}
+# MIR-NEXT: {{^    \$x8 = frame-setup ADDI \$x2, 80$}}
+# MIR-NEXT: {{^    SD killed renamable \$x10, \$x8, -32 :: \(store \(s64\) into %ir\.6\)$}}
+# MIR-NEXT: {{^    SW killed renamable \$x11, \$x8, -36 :: \(store \(s32\) into %ir\.7\)$}}
+# MIR-NEXT: {{^    SW killed renamable \$x12, \$x8, -40 :: \(store \(s32\) into %ir\.8\)$}}
+# MIR-NEXT: {{^    SW killed renamable \$x13, \$x8, -44 :: \(store \(s32\) into %ir\.9\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = LD \$x8, -32 :: \(dereferenceable load \(s64\) from %ir\.6\)$}}
+# MIR-NEXT: {{^    renamable \$x11 = LW \$x8, -40 :: \(dereferenceable load \(s32\) from %ir\.8\)$}}
+# MIR-NEXT: {{^    renamable \$x12 = LW \$x8, -36 :: \(dereferenceable load \(s32\) from %ir\.7\)$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.8 \(%ir-block\.4\):$}}
+# MIR-NEXT: {{^    successors: %bb\.9\(0x40000000\), %bb\.10\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}
+# MIR-NEXT: {{^    BNE \$x13, \$x12, %bb\.10$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.9 \(%ir-block\.4\):$}}
+# MIR-NEXT: {{^    successors: %bb\.8\(0x40000000\), %bb\.10\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    \$x14 = SC_W \$x11, \$x10$}}
+# MIR-NEXT: {{^    BNE \$x14, \$x0, %bb\.8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.10 \(%ir-block\.4\):$}}
+# MIR-NEXT: {{^    successors: %bb\.1\(0x40000000\), %bb\.2\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    SW killed renamable \$x13, \$x8, -48 :: \(store \(s32\) into %ir\.10\)$}}
+# MIR-NEXT: {{^    SW killed renamable \$x14, \$x8, -52 :: \(store \(s32\) into %ir\.11\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = LW \$x8, -48 :: \(dereferenceable load \(s32\) from %ir\.10\)$}}
+# MIR-NEXT: {{^    renamable \$x11 = LW \$x8, -36 :: \(dereferenceable load \(s32\) from %ir\.7\)$}}
+# MIR-NEXT: {{^    BNE killed renamable \$x10, killed renamable \$x11, %bb\.2$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.1$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.1 \(%ir-block\.24\):$}}
+# MIR-NEXT: {{^    successors: %bb\.7\(0x80000000\)$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    renamable \$x10 = LW \$x8, -52 :: \(dereferenceable load \(s32\) from %ir\.11\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = SLTIU killed renamable \$x10, 1$}}
+# MIR-NEXT: {{^    renamable \$x10 = ADDIW killed renamable \$x10, -1$}}
+# MIR-NEXT: {{^    renamable \$x10 = ANDI killed renamable \$x10, -2$}}
+# MIR-NEXT: {{^    SW killed renamable \$x10, \$x8, -20 :: \(store \(s32\) into %ir\.5\)$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.7$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.2 \(%ir-block\.29\):$}}
+# MIR-NEXT: {{^    successors: %bb\.4\(0x40000000\), %bb\.3\(0x40000000\)$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    renamable \$x10 = LW \$x8, -44 :: \(dereferenceable load \(s32\) from %ir\.9\)$}}
+# MIR-NEXT: {{^    BNE killed renamable \$x10, \$x0, %bb\.4$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.3$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.3 \(%ir-block\.32\):$}}
+# MIR-NEXT: {{^    successors: %bb\.7\(0x80000000\)$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    renamable \$x10 = ADDI \$x0, -1$}}
+# MIR-NEXT: {{^    SW killed renamable \$x10, \$x8, -20 :: \(store \(s32\) into %ir\.5\)$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.7$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.4 \(%ir-block\.33\):$}}
+# MIR-NEXT: {{^    successors: %bb\.5\(0x80000000\)$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    renamable \$x10 = ADDI \$x0, 85$}}
+# MIR-NEXT: {{^    SD killed renamable \$x10, \$x8, -72 :: \(store \(s64\) into %ir\.13\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = LD \$x8, -72 :: \(dereferenceable load \(s64\) from %ir\.13\)$}}
+# MIR-NEXT: {{^    renamable \$x11 = LUI target-flags\(riscv-hi\) @zaamo_value$}}
+# MIR-NEXT: {{^    renamable \$x11 = ADDI killed renamable \$x11, target-flags\(riscv-lo\) @zaamo_value$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.5 \(%ir-block\.33\):$}}
+# MIR-NEXT: {{^    successors: %bb\.5\(0x40000000\), %bb\.6\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x11, \$x10$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    \$x12 = LR_D_AQ \$x11$}}
+# MIR-NEXT: {{^    \$x13 = XOR \$x12, \$x10$}}
+# MIR-NEXT: {{^    \$x13 = SC_D \$x13, \$x11$}}
+# MIR-NEXT: {{^    BNE \$x13, \$x0, %bb\.5$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.6 \(%ir-block\.33\):$}}
+# MIR-NEXT: {{^    successors: %bb\.7\(0x80000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x12$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^    SD killed renamable \$x12, \$x8, -80 :: \(store \(s64\) into %ir\.14\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = LD \$x8, -80 :: \(dereferenceable load \(s64\) from %ir\.14\)$}}
+# MIR-NEXT: {{^    SD killed renamable \$x10, \$x8, -64 :: \(store \(s64\) into %ir\.12\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = LD \$x8, -64 :: \(dereferenceable load \(s64\) from %ir\.12\)$}}
+# MIR-NEXT: {{^    renamable \$x11 = LUI target-flags\(riscv-hi\) @zaamo_result_sink$}}
+# MIR-NEXT: {{^    renamable \$x12 = LD renamable \$x11, target-flags\(riscv-lo\) @zaamo_result_sink :: \(volatile dereferenceable load \(s64\) from @zaamo_result_sink\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = ADD killed renamable \$x12, killed renamable \$x10$}}
+# MIR-NEXT: {{^    SD killed renamable \$x10, killed renamable \$x11, target-flags\(riscv-lo\) @zaamo_result_sink :: \(volatile store \(s64\) into @zaamo_result_sink\)$}}
+# MIR-NEXT: {{^    renamable \$x10 = ADDI \$x0, -3$}}
+# MIR-NEXT: {{^    SW killed renamable \$x10, \$x8, -20 :: \(store \(s32\) into %ir\.5\)$}}
+# MIR-NEXT: {{^    PseudoBR %bb\.7$}}
+# MIR-NEXT: {{^  $}}
+# MIR-NEXT: {{^  bb\.7 \(%ir-block\.40\):$}}
+# MIR-NEXT: {{^    renamable \$x10 = LW \$x8, -20 :: \(dereferenceable load \(s32\) from %ir\.5\)$}}
+# MIR-NEXT: {{^    \$x1 = frame-destroy LD \$x2, 72 :: \(load \(s64\) from %stack\.10\)$}}
+# MIR-NEXT: {{^    \$x8 = frame-destroy LD \$x2, 64 :: \(load \(s64\) from %stack\.11\)$}}
+# MIR-NEXT: {{^    \$x2 = frame-destroy ADDI \$x2, 80$}}
+# MIR-NEXT: {{^    PseudoRET implicit \$x10$}}
+# MIR-NEXT: {{^\.\.\.$}}
+# MIR-NEXT: {{^__MIR_EOF__$}}
+
+# JSON: {{^__JSON_BOF__$}}
+# JSON-NEXT: {{^\{$}}
+# JSON-NEXT: {{^  "function": \{$}}
+# JSON-NEXT: {{^    "lrsc_amoxor_d": \{$}}
+# JSON-NEXT: {{^      "basic_blocks": \[$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 0,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 0,$}}
+# JSON-NEXT: {{^          "num_insn": 12,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 1,$}}
+# JSON-NEXT: {{^          "flavors": \{$}}
+# JSON-NEXT: {{^            "LR_W": 1$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 1$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 1,$}}
+# JSON-NEXT: {{^          "mbb_number": 8,$}}
+# JSON-NEXT: {{^          "num_insn": 2,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 2,$}}
+# JSON-NEXT: {{^          "flavors": \{$}}
+# JSON-NEXT: {{^            "SC_W": 1$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 1,$}}
+# JSON-NEXT: {{^          "mbb_number": 9,$}}
+# JSON-NEXT: {{^          "num_insn": 2,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 3,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 10,$}}
+# JSON-NEXT: {{^          "num_insn": 6,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 4,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 1,$}}
+# JSON-NEXT: {{^          "num_insn": 6,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 5,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 2,$}}
+# JSON-NEXT: {{^          "num_insn": 3,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 6,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 3,$}}
+# JSON-NEXT: {{^          "num_insn": 3,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 7,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 4,$}}
+# JSON-NEXT: {{^          "num_insn": 5,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 8,$}}
+# JSON-NEXT: {{^          "flavors": \{$}}
+# JSON-NEXT: {{^            "LR_D_AQ": 1,$}}
+# JSON-NEXT: {{^            "SC_D": 1$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 2,$}}
+# JSON-NEXT: {{^          "mbb_number": 5,$}}
+# JSON-NEXT: {{^          "num_insn": 4,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 1$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 9,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 6,$}}
+# JSON-NEXT: {{^          "num_insn": 11,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        \{$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_traversal_index": 10,$}}
+# JSON-NEXT: {{^          "flavors": \{\},$}}
+# JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \},$}}
+# JSON-NEXT: {{^          "lrsc_count": 0,$}}
+# JSON-NEXT: {{^          "mbb_number": 7,$}}
+# JSON-NEXT: {{^          "num_insn": 5,$}}
+# JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \}$}}
+# JSON-NEXT: {{^      \],$}}
+# JSON-NEXT: {{^      "lr_paths": \{$}}
+# JSON-NEXT: {{^        "bb5:LR_D_AQ:\$x11": \{$}}
+# JSON-NEXT: {{^          "terminating_paths": \{$}}
+# JSON-NEXT: {{^            "5": \{$}}
+# JSON-NEXT: {{^              "cause": "SC Match",$}}
+# JSON-NEXT: {{^              "distance": 2,$}}
+# JSON-NEXT: {{^              "hasLoop": false,$}}
+# JSON-NEXT: {{^              "loops": \[\],$}}
+# JSON-NEXT: {{^              "numberOfLoops": 0$}}
+# JSON-NEXT: {{^            \}$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \},$}}
+# JSON-NEXT: {{^        "bb8:LR_W:\$x10": \{$}}
+# JSON-NEXT: {{^          "terminating_paths": \{$}}
+# JSON-NEXT: {{^            "8 -> 10 -> 1 -> 7": \{$}}
+# JSON-NEXT: {{^              "cause": "RETURN",$}}
+# JSON-NEXT: {{^              "distance": 18,$}}
+# JSON-NEXT: {{^              "hasLoop": false,$}}
+# JSON-NEXT: {{^              "loops": \[$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "8 -> 9 -> 8"$}}
+# JSON-NEXT: {{^                \}$}}
+# JSON-NEXT: {{^              \],$}}
+# JSON-NEXT: {{^              "numberOfLoops": 0$}}
+# JSON-NEXT: {{^            \},$}}
+# JSON-NEXT: {{^            "8 -> 10 -> 2 -> 4 -> 5": \{$}}
+# JSON-NEXT: {{^              "cause": "Another LR",$}}
+# JSON-NEXT: {{^              "distance": 15,$}}
+# JSON-NEXT: {{^              "hasLoop": false,$}}
+# JSON-NEXT: {{^              "loops": \[$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "8 -> 9 -> 8"$}}
+# JSON-NEXT: {{^                \}$}}
+# JSON-NEXT: {{^              \],$}}
+# JSON-NEXT: {{^              "numberOfLoops": 0$}}
+# JSON-NEXT: {{^            \},$}}
+# JSON-NEXT: {{^            "8 -> 9": \{$}}
+# JSON-NEXT: {{^              "cause": "SC Match",$}}
+# JSON-NEXT: {{^              "distance": 2,$}}
+# JSON-NEXT: {{^              "hasLoop": false,$}}
+# JSON-NEXT: {{^              "loops": \[$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "8 -> 9 -> 8"$}}
+# JSON-NEXT: {{^                \}$}}
+# JSON-NEXT: {{^              \],$}}
+# JSON-NEXT: {{^              "numberOfLoops": 0$}}
+# JSON-NEXT: {{^            \}$}}
+# JSON-NEXT: {{^          \}$}}
+# JSON-NEXT: {{^        \}$}}
+# JSON-NEXT: {{^      \},$}}
+# JSON-NEXT: {{^      "total_loop_seq_conditional_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^      "total_loop_seq_unconditional_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^      "total_lrsc_occurrences": 4$}}
+# JSON-NEXT: {{^    \}$}}
+# JSON-NEXT: {{^  \}$}}
+# JSON-NEXT: {{^\}$}}
+# JSON-NEXT: {{^__JSON_EOF__$}}
+
+--- |
+  ; ModuleID = '/home/akamran/Desktop/LIT/seperated/BCs/lrsc_amoxor_d.bc'
+  source_filename = "lrsc_amoxor_d.c"
+  target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
+  target triple = "riscv64-unknown-unknown-elf"
+  
+  @zaamo_value = dso_local global i64 0, align 8
+  @zaamo_result_sink = dso_local global i64 0, align 8
+  
+  ; Function Attrs: noinline nounwind optnone
+  define dso_local signext i32 @lrsc_amoxor_d(ptr noundef %0, i32 noundef signext %1, i32 noundef signext %2, i32 noundef signext %3) #0 {
+    %5 = alloca i32, align 4
+    %6 = alloca ptr, align 8
+    %7 = alloca i32, align 4
+    %8 = alloca i32, align 4
+    %9 = alloca i32, align 4
+    %10 = alloca i32, align 4
+    %11 = alloca i32, align 4
+    %12 = alloca i64, align 8
+    %13 = alloca i64, align 8
+    %14 = alloca i64, align 8
+    store ptr %0, ptr %6, align 8
+    store i32 %1, ptr %7, align 4
+    store i32 %2, ptr %8, align 4
+    store i32 %3, ptr %9, align 4
+    %15 = load ptr, ptr %6, align 8
+    %16 = load i32, ptr %7, align 4
+    %17 = load i32, ptr %8, align 4
+    %18 = call { i32, i32 } asm sideeffect "0:\0A\09lr.w $0, ($2)\0A\09bne $0, $3, 1f\0A\09sc.w $1, $4, ($2)\0A\09bnez $1, 0b\0A\091:\0A\09", "=&r,=&r,r,r,r,~{memory}"(ptr %15, i32 %16, i32 %17) #1, !srcloc !5
+    %19 = extractvalue { i32, i32 } %18, 0
+    %20 = extractvalue { i32, i32 } %18, 1
+    store i32 %19, ptr %10, align 4
+    store i32 %20, ptr %11, align 4
+    %21 = load i32, ptr %10, align 4
+    %22 = load i32, ptr %7, align 4
+    %23 = icmp eq i32 %21, %22
+    br i1 %23, label %24, label %29
+  
+  24:                                               ; preds = %4
+    %25 = load i32, ptr %11, align 4
+    %26 = icmp eq i32 %25, 0
+    %27 = zext i1 %26 to i64
+    %28 = select i1 %26, i32 0, i32 -2
+    store i32 %28, ptr %5, align 4
+    br label %40
+  
+  29:                                               ; preds = %4
+    %30 = load i32, ptr %9, align 4
+    %31 = icmp ne i32 %30, 0
+    br i1 %31, label %33, label %32
+  
+  32:                                               ; preds = %29
+    store i32 -1, ptr %5, align 4
+    br label %40
+  
+  33:                                               ; preds = %29
+    store i64 85, ptr %13, align 8
+    %34 = load i64, ptr %13, align 8
+    %35 = atomicrmw xor ptr @zaamo_value, i64 %34 acquire, align 8
+    store i64 %35, ptr %14, align 8
+    %36 = load i64, ptr %14, align 8
+    store i64 %36, ptr %12, align 8
+    %37 = load i64, ptr %12, align 8
+    %38 = load volatile i64, ptr @zaamo_result_sink, align 8
+    %39 = add i64 %38, %37
+    store volatile i64 %39, ptr @zaamo_result_sink, align 8
+    store i32 -3, ptr %5, align 4
+    br label %40
+  
+  40:                                               ; preds = %33, %32, %24
+    %41 = load i32, ptr %5, align 4
+    ret i32 %41
+  }
+  
+  attributes #0 = { noinline nounwind optnone "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="generic-rv64" "target-features"="+64bit,+a,+m,+relax,+zicsr,+zifencei,-c,-d,-e,-experimental-zacas,-experimental-zcmop,-experimental-zfbfmin,-experimental-zicfilp,-experimental-zicfiss,-experimental-zimop,-experimental-ztso,-experimental-zvfbfmin,-experimental-zvfbfwma,-f,-h,-smaia,-smepmp,-ssaia,-svinval,-svnapot,-svpbmt,-v,-xcvalu,-xcvbi,-xcvbitmanip,-xcvelw,-xcvmac,-xcvmem,-xcvsimd,-xsfvcp,-xsfvfnrclipxfqf,-xsfvfwmaccqqq,-xsfvqmaccdod,-xsfvqmaccqoq,-xtheadba,-xtheadbb,-xtheadbs,-xtheadcmo,-xtheadcondmov,-xtheadfmemidx,-xtheadmac,-xtheadmemidx,-xtheadmempair,-xtheadsync,-xtheadvdot,-xventanacondops,-za128rs,-za64rs,-zawrs,-zba,-zbb,-zbc,-zbkb,-zbkc,-zbkx,-zbs,-zca,-zcb,-zcd,-zce,-zcf,-zcmp,-zcmt,-zdinx,-zfa,-zfh,-zfhmin,-zfinx,-zhinx,-zhinxmin,-zic64b,-zicbom,-zicbop,-zicboz,-ziccamoa,-ziccif,-zicclsm,-ziccrse,-zicntr,-zicond,-zihintntl,-zihintpause,-zihpm,-zk,-zkn,-zknd,-zkne,-zknh,-zkr,-zks,-zksed,-zksh,-zkt,-zmmul,-zvbb,-zvbc,-zve32f,-zve32x,-zve64d,-zve64f,-zve64x,-zvfh,-zvfhmin,-zvkb,-zvkg,-zvkn,-zvknc,-zvkned,-zvkng,-zvknha,-zvknhb,-zvks,-zvksc,-zvksed,-zvksg,-zvksh,-zvkt,-zvl1024b,-zvl128b,-zvl16384b,-zvl2048b,-zvl256b,-zvl32768b,-zvl32b,-zvl4096b,-zvl512b,-zvl64b,-zvl65536b,-zvl8192b,+a,-zaamo" }
+  attributes #1 = { nounwind }
+  
+  !llvm.module.flags = !{!0, !1, !2, !3}
+  !llvm.ident = !{!4}
+  
+  !0 = !{i32 1, !"wchar_size", i32 4}
+  !1 = !{i32 1, !"target-abi", !"lp64"}
+  !2 = !{i32 7, !"frame-pointer", i32 2}
+  !3 = !{i32 8, !"SmallDataLimit", i32 8}
+  !4 = !{!"Ubuntu clang version 18.1.3 (1ubuntu1)"}
+  !5 = !{i64 573, i64 578, i64 604, i64 631, i64 661, i64 685, i64 700}
+...
+---
+name:            lrsc_amoxor_d
+alignment:       4
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+hasFakeUses:     false
+callsEHReturn:   false
+callsUnwindInit: false
+hasEHContTarget: false
+hasEHScopes:     false
+hasEHFunclets:   false
+isOutlined:      false
+debugInstrRef:   false
+failsVerification: false
+tracksDebugUserValues: true
+registers:       []
+liveins:
+  - { reg: '$x10', virtual-reg: '' }
+  - { reg: '$x11', virtual-reg: '' }
+  - { reg: '$x12', virtual-reg: '' }
+  - { reg: '$x13', virtual-reg: '' }
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       80
+  offsetAdjustment: 0
+  maxAlignment:    8
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  functionContext: ''
+  maxCallFrameSize: 0
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  hasTailCall:     false
+  isCalleeSavedInfoValid: true
+  localFrameSize:  64
+fixedStack:      []
+stack:
+  - { id: 0, name: '', type: default, offset: -20, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -4, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 1, name: '', type: default, offset: -32, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -16, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 2, name: '', type: default, offset: -36, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -20, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 3, name: '', type: default, offset: -40, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -24, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 4, name: '', type: default, offset: -44, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -28, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 5, name: '', type: default, offset: -48, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -32, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 6, name: '', type: default, offset: -52, size: 4, alignment: 4, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -36, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 7, name: '', type: default, offset: -64, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -48, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 8, name: '', type: default, offset: -72, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -56, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 9, name: '', type: default, offset: -80, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '', callee-saved-restored: true, 
+      local-offset: -64, debug-info-variable: '', debug-info-expression: '', 
+      debug-info-location: '' }
+  - { id: 10, name: '', type: spill-slot, offset: -8, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '$x1', callee-saved-restored: true, 
+      debug-info-variable: '', debug-info-expression: '', debug-info-location: '' }
+  - { id: 11, name: '', type: spill-slot, offset: -16, size: 8, alignment: 8, 
+      stack-id: default, callee-saved-register: '$x8', callee-saved-restored: true, 
+      debug-info-variable: '', debug-info-expression: '', debug-info-location: '' }
+entry_values:    []
+callSites:       []
+debugValueSubstitutions: []
+constants:       []
+machineFunctionInfo:
+  varArgsFrameIndex: 0
+  varArgsSaveSize: 0
+body:             |
+  bb.0 (%ir-block.4):
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11, $x12, $x13, $x1
+  
+    $x2 = frame-setup ADDI $x2, -80
+    frame-setup SD killed $x1, $x2, 72 :: (store (s64) into %stack.10)
+    frame-setup SD killed $x8, $x2, 64 :: (store (s64) into %stack.11)
+    $x8 = frame-setup ADDI $x2, 80
+    SD killed renamable $x10, $x8, -32 :: (store (s64) into %ir.6)
+    SW killed renamable $x11, $x8, -36 :: (store (s32) into %ir.7)
+    SW killed renamable $x12, $x8, -40 :: (store (s32) into %ir.8)
+    SW killed renamable $x13, $x8, -44 :: (store (s32) into %ir.9)
+    renamable $x10 = LD $x8, -32 :: (dereferenceable load (s64) from %ir.6)
+    renamable $x11 = LW $x8, -40 :: (dereferenceable load (s32) from %ir.8)
+    renamable $x12 = LW $x8, -36 :: (dereferenceable load (s32) from %ir.7)
+    INLINEASM &"0:\0A\09lr.w $0, ($2)\0A\09bne $0, $3, 1f\0A\09sc.w $1, $4, ($2)\0A\09bnez $1, 0b\0A\091:\0A\09", 25 /* sideeffect mayload maystore attdialect */, 720907 /* regdef-ec:GPRNoX0 */, def early-clobber renamable $x13, 720907 /* regdef-ec:GPRNoX0 */, def early-clobber renamable $x14, 720905 /* reguse:GPRNoX0 */, killed renamable $x10, 720905 /* reguse:GPRNoX0 */, killed renamable $x12, 720905 /* reguse:GPRNoX0 */, killed renamable $x11, !5
+    SW killed renamable $x13, $x8, -48 :: (store (s32) into %ir.10)
+    SW killed renamable $x14, $x8, -52 :: (store (s32) into %ir.11)
+    renamable $x10 = LW $x8, -48 :: (dereferenceable load (s32) from %ir.10)
+    renamable $x11 = LW $x8, -36 :: (dereferenceable load (s32) from %ir.7)
+    BNE killed renamable $x10, killed renamable $x11, %bb.2
+    PseudoBR %bb.1
+  
+  bb.1 (%ir-block.24):
+    successors: %bb.5(0x80000000)
+  
+    renamable $x10 = LW $x8, -52 :: (dereferenceable load (s32) from %ir.11)
+    renamable $x10 = SLTIU killed renamable $x10, 1
+    renamable $x10 = ADDIW killed renamable $x10, -1
+    renamable $x10 = ANDI killed renamable $x10, -2
+    SW killed renamable $x10, $x8, -20 :: (store (s32) into %ir.5)
+    PseudoBR %bb.5
+  
+  bb.2 (%ir-block.29):
+    successors: %bb.4(0x40000000), %bb.3(0x40000000)
+  
+    renamable $x10 = LW $x8, -44 :: (dereferenceable load (s32) from %ir.9)
+    BNE killed renamable $x10, $x0, %bb.4
+    PseudoBR %bb.3
+  
+  bb.3 (%ir-block.32):
+    successors: %bb.5(0x80000000)
+  
+    renamable $x10 = ADDI $x0, -1
+    SW killed renamable $x10, $x8, -20 :: (store (s32) into %ir.5)
+    PseudoBR %bb.5
+  
+  bb.4 (%ir-block.33):
+    successors: %bb.6(0x80000000)
+  
+    renamable $x10 = ADDI $x0, 85
+    SD killed renamable $x10, $x8, -72 :: (store (s64) into %ir.13)
+    renamable $x10 = LD $x8, -72 :: (dereferenceable load (s64) from %ir.13)
+    renamable $x11 = LUI target-flags(riscv-hi) @zaamo_value
+    renamable $x11 = ADDI killed renamable $x11, target-flags(riscv-lo) @zaamo_value
+  
+  bb.6 (%ir-block.33):
+    successors: %bb.6(0x40000000), %bb.7(0x40000000)
+    liveins: $x11, $x10
+  
+    $x12 = LR_D_AQ $x11
+    $x13 = XOR $x12, $x10
+    $x13 = SC_D $x13, $x11
+    BNE $x13, $x0, %bb.6
+  
+  bb.7 (%ir-block.33):
+    successors: %bb.5(0x80000000)
+    liveins: $x12
+  
+    SD killed renamable $x12, $x8, -80 :: (store (s64) into %ir.14)
+    renamable $x10 = LD $x8, -80 :: (dereferenceable load (s64) from %ir.14)
+    SD killed renamable $x10, $x8, -64 :: (store (s64) into %ir.12)
+    renamable $x10 = LD $x8, -64 :: (dereferenceable load (s64) from %ir.12)
+    renamable $x11 = LUI target-flags(riscv-hi) @zaamo_result_sink
+    renamable $x12 = LD renamable $x11, target-flags(riscv-lo) @zaamo_result_sink :: (volatile dereferenceable load (s64) from @zaamo_result_sink)
+    renamable $x10 = ADD killed renamable $x12, killed renamable $x10
+    SD killed renamable $x10, killed renamable $x11, target-flags(riscv-lo) @zaamo_result_sink :: (volatile store (s64) into @zaamo_result_sink)
+    renamable $x10 = ADDI $x0, -3
+    SW killed renamable $x10, $x8, -20 :: (store (s32) into %ir.5)
+    PseudoBR %bb.5
+  
+  bb.5 (%ir-block.40):
+    renamable $x10 = LW $x8, -20 :: (dereferenceable load (s32) from %ir.5)
+    $x1 = frame-destroy LD $x2, 72 :: (load (s64) from %stack.10)
+    $x8 = frame-destroy LD $x2, 64 :: (load (s64) from %stack.11)
+    $x2 = frame-destroy ADDI $x2, 80
+    PseudoRET implicit $x10
+...
