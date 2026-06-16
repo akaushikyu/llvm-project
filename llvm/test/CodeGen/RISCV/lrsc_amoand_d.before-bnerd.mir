@@ -10,14 +10,10 @@
 # RUN:   -run-pass=riscv-expand-inline-asm,riscv-count-lr-sc \
 # RUN:   -dump-insn-stats-json -verify-machineinstrs \
 # RUN:   lrsc_amoand_d.before-bnerd.mir -o lrsc_amoand_d.after-expand-count.mir
-# RUN: echo __MIR_BOF__ > %t/mir-output.txt
-# RUN: cat %t/lrsc_amoand_d.after-expand-count.mir >> %t/mir-output.txt
-# RUN: echo __MIR_EOF__ >> %t/mir-output.txt
-# RUN: FileCheck %s --check-prefix=MIR --strict-whitespace < %t/mir-output.txt
-# RUN: echo __JSON_BOF__ > %t/json-output.txt
-# RUN: cat %t/lrsc_amoand_d.before-bnerd.mir.lrscStats.json >> %t/json-output.txt
-# RUN: echo __JSON_EOF__ >> %t/json-output.txt
-# RUN: FileCheck %s --check-prefix=JSON --strict-whitespace < %t/json-output.txt
+# RUN: (echo __MIR_BOF__; cat %t/lrsc_amoand_d.after-expand-count.mir; echo __MIR_EOF__) \
+# RUN:   | FileCheck %s --check-prefix=MIR --strict-whitespace
+# RUN: (echo __JSON_BOF__; cat %t/lrsc_amoand_d.before-bnerd.mir.lrscStats.json; echo __JSON_EOF__) \
+# RUN:   | FileCheck %s --check-prefix=JSON --strict-whitespace
 #
 
 
@@ -216,7 +212,7 @@
 # MIR-NEXT: {{^body:             \|$}}
 # MIR-NEXT: {{^  bb\.0 \(%ir-block\.4\):$}}
 # MIR-NEXT: {{^    successors: %bb\.8\(0x80000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x2 = frame-setup ADDI \$x2, -80$}}
 # MIR-NEXT: {{^    frame-setup SD killed \$x1, \$x2, 72 :: \(store \(s64\) into %stack\.10\)$}}
@@ -232,7 +228,7 @@
 # MIR-NEXT: {{^    PseudoBR %bb\.8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.8 \(%ir-block\.4\):$}}
-# MIR-NEXT: {{^    successors: %bb\.10\(0x40000000\), %bb\.9\(0x40000000\)$}}
+# MIR-NEXT: {{^    successors: %bb\.9\(0x40000000\), %bb\.10\(0x40000000\)$}}
 # MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}

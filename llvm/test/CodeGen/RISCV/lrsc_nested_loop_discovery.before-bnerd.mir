@@ -231,7 +231,7 @@
 # MIR-NEXT: body:             |
 # MIR-NEXT:   bb.0 (%ir-block.3):
 # MIR-NEXT:     successors: %bb.15(0x80000000)
-# MIR-NEXT:     liveins: $x10, $x11, $x12, $x1
+# MIR-NEXT:     liveins: $x10, $x11, $x12, $x1, $x13, $x14, $x0
 # MIR-NEXT:     $x2 = frame-setup ADDI $x2, -64
 # MIR-NEXT:     frame-setup SD killed $x1, $x2, 56 :: (store (s64) into %stack.9)
 # MIR-NEXT:     frame-setup SD killed $x8, $x2, 48 :: (store (s64) into %stack.10)
@@ -244,7 +244,7 @@
 # MIR-NEXT:     renamable $x12 = LW $x8, -36 :: (dereferenceable load (s32) from %ir.6)
 # MIR-NEXT:     PseudoBR %bb.15
 # MIR-NEXT:   bb.15 (%ir-block.3):
-# MIR-NEXT:     successors: %bb.17(0x40000000), %bb.16(0x40000000)
+# MIR-NEXT:     successors: %bb.16(0x40000000), %bb.17(0x40000000)
 # MIR-NEXT:     liveins: $x10, $x11, $x12, $x1, $x13, $x14, $x0, $x8
 # MIR-NEXT:     $x13 = LR_W $x10
 # MIR-NEXT:     BNE $x13, $x12, %bb.17
@@ -668,6 +668,11 @@
 # JSON-NEXT:               "hasLoop": true,
 # JSON-NEXT:               "loops": [
 # JSON-NEXT:                 {
+# JSON-NEXT:                   "cycle_flavour": "LRSC",
+# JSON-NEXT:                   "num_instr": 6,
+# JSON-NEXT:                   "path": "15 -> 16 -> 15"
+# JSON-NEXT:                 },
+# JSON-NEXT:                 {
 # JSON-NEXT:                   "cycle_flavour": "NORMAL",
 # JSON-NEXT:                   "num_instr": 14,
 # JSON-NEXT:                   "path": "6 -> 7 -> 6"
@@ -681,11 +686,6 @@
 # JSON-NEXT:                   "cycle_flavour": "NORMAL",
 # JSON-NEXT:                   "num_instr": 48,
 # JSON-NEXT:                   "path": "4 -> 5 -> 6 -> 8 -> 10 -> 11 -> 4"
-# JSON-NEXT:                 },
-# JSON-NEXT:                 {
-# JSON-NEXT:                   "cycle_flavour": "LRSC",
-# JSON-NEXT:                   "num_instr": 6,
-# JSON-NEXT:                   "path": "15 -> 16 -> 15"
 # JSON-NEXT:                 }
 # JSON-NEXT:               ],
 # JSON-NEXT:               "numberOfLoops": 3
