@@ -603,7 +603,6 @@ void RISCVPassConfig::addPreEmitPass2() {
   if (EnableCFIInstrInserter)
     addPass(createCFIInstrInserter());
 
-<<<<<<< HEAD
 
   addPass(createRISCVExpandINLINEASMPass());
     // add pass to count LR/SC instruction pairs...
@@ -616,13 +615,6 @@ void RISCVPassConfig::addPreEmitPass2() {
   if (RunBnerd) {
     addPass(createRISCVInsertBNERDSCPass());
   }
-
-=======
-  // add pass to count LR/SC instruction pairs...
-  addPass(createRISCVInsertBNERDSCPass());
-  addPass(createRISCVExpandINLINEASMPass());
-  addPass(createRISCVCountLRSCPass());
->>>>>>> 49a100873b97 ([RISCV] Expand inline asm and track LR/SC terminating paths (#13))
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
