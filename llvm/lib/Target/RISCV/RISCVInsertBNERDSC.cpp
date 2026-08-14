@@ -197,6 +197,7 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
         return E;
+<<<<<<< HEAD
       default:
         break;
         
@@ -204,6 +205,12 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
     MBBI++;
   }
   return E;
+=======
+    }
+    MBBI++;
+  }
+
+>>>>>>> 4af891357a44 ([RISCV] Restrict BNERD insertion to conditional LR/SC paths)
 }
 // ===========================================================================
 // Pass entry point
@@ -248,6 +255,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       // found LR
       ++NumLRs;
       if(MBBI == E){
+<<<<<<< HEAD
         seenLRMBBs.insert(&MBB);
         continue;
       }
@@ -257,6 +265,16 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
         seenLRMBBs.insert(&MBB);
         continue;
       }
+=======
+        continue;
+      }
+      MachineBasicBlock::iterator BrI= isBranchAfter(*MBBI);
+      
+      if(BrI==E){
+        seenLRMBBs.insert(&MBB);
+        continue;
+      }
+>>>>>>> 4af891357a44 ([RISCV] Restrict BNERD insertion to conditional LR/SC paths)
       MachineInstr &Br = *BrI;
 
       MachineBasicBlock *TargetMBB = nullptr;
