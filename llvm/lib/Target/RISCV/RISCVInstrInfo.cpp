@@ -1440,6 +1440,7 @@ unsigned RISCVInstrInfo::insertBranch(
       || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
       || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
       || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE) {
+    errs() << ">>> REINSERTING PSEUDO-BRANCH: " << getName(Cond[0].getImm()) << " function: " << MBB.getParent()->getName() << "\n";
 
     MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm())).add(Cond[1]).add(Cond[2]).add(Cond[3]).addMBB(TBB);
 
@@ -1548,6 +1549,7 @@ void RISCVInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
 
 bool RISCVInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
+  errs() << "\n Cond size: " << Cond.size() << "\n";
   if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
       || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
       || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
