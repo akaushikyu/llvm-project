@@ -847,7 +847,6 @@ inline bool isSC(uint16_t opc) {
   return false;
 }
 
-
 inline bool isSCMBB(const MachineBasicBlock &MBB) {
 
   for (const MachineInstr &MI : MBB)
