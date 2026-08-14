@@ -32,13 +32,16 @@
 // inside INLINEASM.
 //
 //===----------------------------------------------------------------------===//
+/* Define the public pass name and the debug channel used by LLVM diagnostics. */
 #define RISCV_EXPAND_INLINE_ASM_NAME "RISC-V Expand Inline Assembly "
 #define DEBUG_TYPE "riscv-expand-inline-asm"
 
+/* Include the RISC-V-specific helpers and target interfaces used by the pass. */
 #include "LRSCCountUtils.hpp"
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVTargetMachine.h"
+/* Include LLVM containers, machine-code APIs, IR types, and support utilities. */
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -56,41 +59,61 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
+/* Include the C++ standard-library facilities used by the implementation. */
 #include <algorithm>
-#include <cctype>
 #include <cstring>
 #include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+/* Make LLVM and LR/SC utility names directly available in this translation unit. */
 using namespace llvm;
 using namespace utils;
 
+/* Control whether the pass emits its collected inline-assembly statistics. */
 cl::opt<bool> RISCVEXPANDINLINEASMEMIT(
     "dump-expand-inline-asm-stat", cl::Hidden,
     cl::desc("The stat emission control is used for enabling and disabling the "
              "emission of instruction stats for inline assembly blocks. "),
     cl::init(false));
-struct InlineAsmOperand {
-  enum OperandKind { OK_Reg, OK_DefReg, OK_Imm };
 
-  OperandKind Kind;
-  Register Reg;
-  int64_t Imm;
+/* Associate an inline-assembly label name with its parsed instruction index. */
+struct InlineAsmLabelRecord {
+  std::string Name;
+  int RecordIndex = 0;
 };
+/* Represent one parsed register or immediate operand and its emission role. */
+struct InlineAsmOperand {
+  enum OperandKind { OK_Reg, OK_DefReg, OK_Imm, OK_Invalid };
+
+  OperandKind Kind = OK_Invalid;
+  Register Reg = Register();
+  int64_t Imm = 0;
+};
+
+/* Store the opcode, operands, and optional branch target for one asm line. */
 struct InlineAsmLineInstrRecord {
 
-  unsigned Opc;
+  unsigned Opc = 0;
   SmallVector<InlineAsmOperand, 4> Operands;
+  std::string BranchTarget;
 };
+/* Keep the pass implementation private to this translation unit. */
 namespace {
+/* Declare the MachineFunction pass and its parsing and CFG-rewriting helpers. */
 class RISCVExpandINLINEASM : public MachineFunctionPass {
 public:
+  /* Hold the legacy pass identifier required by LLVM's pass manager. */
   static char ID;
 
+  /* Retain the current module name for optional statistics output. */
   static std::string ModuleName;
 
+/*--------------------------------------------------------------------------*/
+/* RISCVExpandINLINEASM:
+   Constructs the pass with the legacy MachineFunctionPass identifier.
+   - Registers this instance under the static pass ID used by LLVM. */
   RISCVExpandINLINEASM() : MachineFunctionPass(ID) {}
 
   ~RISCVExpandINLINEASM();
@@ -100,7 +123,16 @@ public:
 
   bool isBranchMnemonic(StringRef M);
 
-  bool isBranchTargetTok(StringRef Tok);
+  bool hasDefOperand(StringRef Mnemonic);
+
+
+
+  int resolveBranchTarget(StringRef Target,
+                          int BranchRecordIndex) const;
+
+  bool isConditionalBranchOpc(unsigned Opc);
+
+  bool isUnconditionalBranchOpc(unsigned Opc);
 
   bool isBranchOpc(unsigned Opc);
 
@@ -109,22 +141,23 @@ public:
   int64_t encodeFenceArg(StringRef S);
 
   InlineAsmOperand parseOperand(StringRef Tok, StringRef Mnemonic,
-                                unsigned OpIdx);
+                              unsigned OpIdx);
 
   unsigned mnemonicToOpcode(StringRef M);
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  void copyLiveInsManually(MachineBasicBlock *Dst,
-                           const MachineBasicBlock &Src);
-
+/*--------------------------------------------------------------------------*/
+/* getPassName:
+   Returns the human-readable name used to identify this pass.
+   - Supplies the shared RISCV_EXPAND_INLINE_ASM_NAME string. */
   StringRef getPassName() const override {
     return RISCV_EXPAND_INLINE_ASM_NAME;
   }
 
   void dumpStats(raw_ostream &OS);
 
-  void inlineAsmToMachineInstrsRewireCFG(StringRef AsmStr,
+  bool inlineAsmToMachineInstrsRewireCFG(StringRef AsmStr,
                                          MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MBBI,
                                          const TargetInstrInfo *TII);
@@ -132,15 +165,20 @@ public:
   void buildInlineAsmLineRecords(StringRef Line);
 
 private:
-  SmallVector<InlineAsmLineInstrRecord, 6> InlineAsmInstructionsRecord;
-
+  /* Accumulate the parsed instructions and labels for the current asm block. */
+  SmallVector<InlineAsmLineInstrRecord, 6> InlineAsmInstructionsRecords;
+  SmallVector<InlineAsmLabelRecord, 8> InlineAsmLabels;
+  /* Record whether any unsupported syntax invalidated the current parse. */
+  bool InlineAsmParsingFailed = false;
 }; // end class RISCVExpandINLINEASM
 
 } // end anonymous namespace
 
+/* Define the pass identifier and initialize the stored module name. */
 char RISCVExpandINLINEASM::ID = 0;
 std::string RISCVExpandINLINEASM::ModuleName = "";
 
+/* Register the pass with LLVM's legacy pass initialization infrastructure. */
 INITIALIZE_PASS(RISCVExpandINLINEASM, "riscv-expand-inline-asm",
                 RISCV_EXPAND_INLINE_ASM_NAME, false, false)
 
@@ -180,29 +218,37 @@ RISCVExpandINLINEASM::~RISCVExpandINLINEASM() {
    immediate placeholders, then calls inlineAsmToMachineInstrsRewireCFG() to
    lower the expanded text into real MachineInstrs and update the CFG.
    Stops after processing the first INLINEASM encountered in each basic block
-   (inner break) and always returns true to indicate the function was
-   modified. */
+   (inner break) and returns whether at least one supported INLINEASM was
+   successfully expanded. */
 bool RISCVExpandINLINEASM::runOnMachineFunction(MachineFunction &MF) {
+  /* Track whether expanding any INLINEASM changes this MachineFunction. */
+  bool Changed = false;
+  /* Report the function and its initial machine-block state for debugging. */
   LLVM_DEBUG(
       dbgs() << "\n=== RISCVExpandINLINEASM runOnMachineFunction ENTER ===\n");
   LLVM_DEBUG(dbgs() << "[run] Function: " << MF.getName() << "\n");
   LLVM_DEBUG(dbgs() << "[run] Initial MBB count: " << MF.size() << "\n");
 
+  /* Capture the parent module name used by the optional statistics report. */
   llvm::Module *m = MF.getFunction().getParent();
   RISCVExpandINLINEASM::ModuleName = m->getModuleIdentifier();
   LLVM_DEBUG(dbgs() << "[run] Module: " << RISCVExpandINLINEASM::ModuleName
                     << "\n");
+  /* Visit each machine basic block that may contain opaque inline assembly. */
   for (auto &MBB : MF) {
     LLVM_DEBUG(dbgs() << "[run] Visiting MBB #" << MBB.getNumber() << " size="
                       << MBB.size() << " succs=" << MBB.succ_size() << "\n");
+    /* Obtain target interfaces needed for register names and instruction emission. */
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
     LLVM_DEBUG(dbgs() << "[run] TRI=" << TRI << " TII=" << TII << "\n");
+    /* Scan the current block until an INLINEASM MachineInstr is found. */
     for (auto MBBI = MBB.begin(), E = MBB.end(); MBBI != E; ++MBBI) {
       LLVM_DEBUG(dbgs() << "[run]   MI opcode=" << MBBI->getOpcode()
                         << " numOperands=" << MBBI->getNumOperands()
                         << " isInlineAsm=" << MBBI->isInlineAsm() << "\n");
       if (MBBI->isInlineAsm()) {
+        /* Preserve the instruction location and inspect the raw INLINEASM operand. */
         LLVM_DEBUG(dbgs() << "[run] >>> Found INLINEASM in MBB #"
                           << MBB.getNumber() << "\n");
         LLVM_DEBUG(dbgs() << "[run] INLINEASM MachineInstr dump follows:\n");
@@ -210,33 +256,25 @@ bool RISCVExpandINLINEASM::runOnMachineFunction(MachineFunction &MF) {
         DebugLoc DL = MBBI->getDebugLoc();
         LLVM_DEBUG(dbgs() << "[run] DebugLoc valid=" << bool(DL) << "\n");
         // Process inline assembly instruction
-        LLVM_DEBUG(
-            dbgs()
-            << "[run] About to read asm string from operand 0. numOperands="
-            << MBBI->getNumOperands() << "\n");
+        LLVM_DEBUG( dbgs() << "[run] About to read asm string from operand 0. numOperands=" << MBBI->getNumOperands() << "\n");
         const char *AsmStr = MBBI->getOperand(0).getSymbolName();
-
         LLVM_DEBUG(dbgs() << "Found inline assembly: " << AsmStr << "\n");
-
+        /* Expand numeric placeholders into concrete register or immediate text. */
         LLVM_DEBUG(dbgs() << "[run] About to call expandInlineAsm()\n");
         std::string ExpandedAssemblyStr = expandInlineAsm(*MBBI, AsmStr, TRI);
-        LLVM_DEBUG(
-            dbgs() << "[run] Returned from expandInlineAsm(), expanded length="
-                   << ExpandedAssemblyStr.size() << "\n");
-        LLVM_DEBUG(dbgs() << "[run] Expanded asm:\n"
-                          << ExpandedAssemblyStr << "\n");
+        LLVM_DEBUG( dbgs() << "[run] Returned from expandInlineAsm(), expanded length=" << ExpandedAssemblyStr.size() << "\n");
+        LLVM_DEBUG(dbgs() << "[run] Expanded asm:\n" << ExpandedAssemblyStr << "\n");
 
         llvm::StringRef ExpandedAssemblyStrRef(ExpandedAssemblyStr);
 
-        LLVM_DEBUG(
-            dbgs()
-            << "[run] About to call inlineAsmToMachineInstrsRewireCFG()\n");
-        inlineAsmToMachineInstrsRewireCFG(ExpandedAssemblyStrRef, MBB, MBBI,
-                                          TII);
+        /* Lower the expanded instructions and merge the resulting CFG change. */
+        LLVM_DEBUG( dbgs() << "[run] About to call inlineAsmToMachineInstrsRewireCFG()\n");
+        Changed |= inlineAsmToMachineInstrsRewireCFG(ExpandedAssemblyStrRef, MBB, MBBI, TII);
         LLVM_DEBUG(
             dbgs()
             << "[run] Returned from inlineAsmToMachineInstrsRewireCFG()\n");
 
+        /* Process at most one INLINEASM instruction from this basic block. */
         break;
       }
 
@@ -246,7 +284,8 @@ bool RISCVExpandINLINEASM::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "[run] Final MBB count: " << MF.size() << "\n");
   LLVM_DEBUG(
       dbgs() << "=== RISCVExpandINLINEASM runOnMachineFunction EXIT ===\n");
-  return true;
+  /* Tell the pass manager whether a supported INLINEASM block was expanded. */
+  return Changed;
 } // end runOnMachineFunction
 
 /*--------------------------------------------------------------------------*/
@@ -599,7 +638,8 @@ std::string RISCVExpandINLINEASM::expandInlineAsm(
       size_t OperandNumberStart = ScanIndex;
 
       while (ScanIndex < StringLength &&
-             std::isdigit(static_cast<unsigned char>(AsmStr[ScanIndex]))) {
+            AsmStr[ScanIndex] >= '0' &&
+            AsmStr[ScanIndex] <= '9') {
         ++ScanIndex;
       }
 
@@ -615,7 +655,7 @@ std::string RISCVExpandINLINEASM::expandInlineAsm(
         continue;
       }
 
-      int OperandNumber = std::stoi(std::string(
+      size_t OperandNumber = std::stoul(std::string(
           AsmStr + OperandNumberStart, ScanIndex - OperandNumberStart));
       LLVM_DEBUG(dbgs() << "[expand][phase2] placeholder at char "
                         << StringIndex << " operandNumber=" << OperandNumber
@@ -645,8 +685,7 @@ std::string RISCVExpandINLINEASM::expandInlineAsm(
       }
 
       // Substitute operand string.
-      if (OperandNumber >= 0 &&
-          OperandNumber < static_cast<int>(OpStrings.size())) {
+      if (OperandNumber < OpStrings.size()) {
         const std::string &OperandText = OpStrings[OperandNumber];
         LLVM_DEBUG(dbgs() << "[expand][phase2] substituting operand "
                           << OperandNumber << " modifier='" << OperandModifier
@@ -711,32 +750,26 @@ std::string RISCVExpandINLINEASM::expandInlineAsm(
 
    Steps:
      1. Splits AsmStr on newlines and calls buildInlineAsmLineRecords() for
-        each non-empty line to populate InlineAsmInstructionsRecord.
+        each non-empty line to populate InlineAsmInstructionsRecords.
      2. Returns early (leaving INLINEASM untouched) if no records were parsed
         or if the record set does not contain both an LR and an SC instruction.
-     3. Detects whether the LR/SC pair is separated by a conditional branch
-        (IsConditional). When conditional, three new MBBs are created:
-          LR_MBB  - holds the LR instruction and the value-comparison branch.
-          SC_MBB  - holds the SC instruction and the retry branch.
-          TailMBB - receives everything that followed INLINEASM in MBB.
-        When unconditional (simple retry loop), only TailMBB is created and
-        the branch target loops back to MBB itself.
-     4. Copies original MBB live-ins and inline-asm physical registers as
-        live-ins to each new MBB so register liveness remains correct after
-        the split.
-     5. Splices instructions that followed INLINEASM into TailMBB, transfers
-        MBB's original CFG successors to TailMBB, and erases the INLINEASM MI.
-     6. Emits each InlineAsmLineInstrRecord into the appropriate MBB via
-        BuildMI, resolving branch target MBBs from CFG context rather than
-        from asm label names.
-     7. Adds CFG successor edges:
-          Conditional:   MBB->LR_MBB, LR_MBB->SC_MBB, LR_MBB->TailMBB,
-                         SC_MBB->LR_MBB, SC_MBB->TailMBB.
-          Unconditional: MBB->MBB (retry self-loop), MBB->TailMBB. */
-void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
+    3. Resolves every recorded branch target to an instruction-record index.
+    4. Builds the set of instruction-record boundaries where MachineBasicBlocks
+      must begin, including branch targets and branch fallthrough boundaries.
+    5. Creates MachineBasicBlocks for those instruction regions and maps every
+      instruction-record index to its containing MachineBasicBlock.
+    6. Moves instructions following the INLINEASM into TailMBB and maps the
+      record index after the final inline-asm instruction to TailMBB.
+    7. Emits each parsed instruction into the MachineBasicBlock associated with
+      its instruction-record index.
+    8. Resolves each branch target record index to its MachineBasicBlock and adds
+      that block as the branch operand.
+    9. Builds CFG successor edges from the resolved branch targets and
+      fallthrough record boundaries.*/
+bool RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
     StringRef AsmStr, MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
     const TargetInstrInfo *TII) {
-
+  
   LLVM_DEBUG(dbgs() << "\n[rewire] ENTER inlineAsmToMachineInstrsRewireCFG\n");
   LLVM_DEBUG(dbgs() << "[rewire] source MBB #" << MBB.getNumber()
                     << " size=" << MBB.size() << " succs=" << MBB.succ_size()
@@ -744,15 +777,20 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   LLVM_DEBUG(dbgs() << "[rewire] AsmStr length=" << AsmStr.size() << "\n");
   LLVM_DEBUG(dbgs() << "[rewire] AsmStr:\n" << AsmStr << "\n");
 
-  InlineAsmInstructionsRecord.clear();
+  /* Reset all state retained from the previously processed INLINEASM block. */
+  InlineAsmInstructionsRecords.clear();
+  InlineAsmLabels.clear();
+  InlineAsmParsingFailed = false;
 
-  LLVM_DEBUG(dbgs() << "[rewire] Cleared InlineAsmInstructionsRecord\n");
+  LLVM_DEBUG(dbgs() << "[rewire] Cleared InlineAsmInstructionsRecords\n");
 
+  /* Split the expanded template into individual lines for instruction parsing. */
   SmallVector<StringRef, 16> Lines;
   AsmStr.split(Lines, '\n');
 
   LLVM_DEBUG(dbgs() << "[rewire] split line count=" << Lines.size() << "\n");
 
+  /* Parse every non-empty line while preserving the original asm on failure. */
   for (StringRef Line : Lines) {
     LLVM_DEBUG(dbgs() << "[rewire] raw line='" << Line << "'\n");
 
@@ -765,48 +803,107 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
       continue;
     }
 
-    LLVM_DEBUG(
-        dbgs() << "[rewire] About to call buildInlineAsmLineRecords()\n");
+    LLVM_DEBUG(dbgs() << "[rewire] About to call buildInlineAsmLineRecords()\n");
     buildInlineAsmLineRecords(Line);
-    LLVM_DEBUG(
-        dbgs() << "[rewire] returned from buildInlineAsmLineRecords(), records="
-               << InlineAsmInstructionsRecord.size() << "\n");
+    if (InlineAsmParsingFailed) {
+      LLVM_DEBUG(dbgs() << "[rewire] parsing failed; preserving original INLINEASM\n");
+
+      InlineAsmInstructionsRecords.clear();
+      return false;
+    }
+    LLVM_DEBUG(dbgs() << "[rewire] returned from buildInlineAsmLineRecords(), records=" << InlineAsmInstructionsRecords.size() << "\n");
   }
 
-  if (InlineAsmInstructionsRecord.empty()) {
+  /* Leave the opaque INLINEASM untouched when no supported records were found. */
+  if (InlineAsmInstructionsRecords.empty()) {
+    LLVM_DEBUG(dbgs() << "[rewire][unsupported] no supported inline asm records were parsed; " << "leaving original INLINEASM unchanged\n");
+    return false;
+  }
+  /* Cache the parsed record count used by all following index calculations. */
+  int NumRecords = InlineAsmInstructionsRecords.size();
+  /* Resolve and collect each unique instruction index targeted by a branch. */
+  //collect the unique targeted record boundaries
+  SmallVector<int, 8> TargetRecordIndices;
+  for (int I = 0; I < NumRecords; ++I) {
+    const InlineAsmLineInstrRecord &Record =
+        InlineAsmInstructionsRecords[I];
+
+    if (!isBranchOpc(Record.Opc)) {
+      continue;
+    }
+      
+
+    int TargetRecordIndex = resolveBranchTarget(Record.BranchTarget, I);
+
+    if (TargetRecordIndex < 0) {
+
+      LLVM_DEBUG(dbgs() << "[rewire][unsupported] could not resolve branch target '"
+                << Record.BranchTarget << "' for instruction record " << I
+                << "; preserving original INLINEASM\n");
+
+      InlineAsmParsingFailed = true;
+      InlineAsmInstructionsRecords.clear();
+      InlineAsmLabels.clear();
+      return false;
+    }
+
+    if (!llvm::is_contained(TargetRecordIndices, TargetRecordIndex))
+      TargetRecordIndices.push_back(TargetRecordIndex);
+
     LLVM_DEBUG(
-        dbgs()
-        << "[rewire][unsupported] no supported inline asm records were parsed; "
-        << "leaving original INLINEASM unchanged\n");
-    return;
+        dbgs() << "[rewire] resolved branch target '" << Record.BranchTarget
+              << "' from instruction record " << I
+              << " to instruction record " << TargetRecordIndex << "\n");
+  }
+  /* Order branch-target boundaries before constructing block intervals. */
+  llvm::sort(TargetRecordIndices);
+
+  //collect all block-start record indices
+  /*
+  
+  TargetRecordIndices= where branches jump
+
+  BlockStartRecordIndices = where MBBs need to start = branch targets:
+        + fallthrough-after-branch boundaries
+        + beginning of inline asm
+        + final record index
+  */
+  /* Seed block starts with branch targets and the inline-assembly entry. */
+  SmallVector<int, 8> BlockStartRecordIndices = TargetRecordIndices;
+
+  if (!llvm::is_contained(BlockStartRecordIndices, 0))
+    BlockStartRecordIndices.push_back(0);
+
+  
+
+  /* Add the instruction after every branch as a possible fallthrough block. */
+  for (int I = 0; I < NumRecords; ++I) {
+    const InlineAsmLineInstrRecord &Record = InlineAsmInstructionsRecords[I];
+
+    if (!isBranchOpc(Record.Opc)){
+      continue;
+    }
+      
+
+    int FallthroughIndex = I + 1;
+
+    if (!llvm::is_contained(BlockStartRecordIndices, FallthroughIndex))
+      BlockStartRecordIndices.push_back(FallthroughIndex);
   }
 
+  /* Add the end sentinel that maps the post-inline-asm path to TailMBB. */
+  if (!llvm::is_contained(BlockStartRecordIndices, NumRecords))
+    BlockStartRecordIndices.push_back(NumRecords);
+
+  llvm::sort(BlockStartRecordIndices);
+
+  /* Confirm that the parsed block contains the LR/SC pair this pass handles. */
   bool HasLR = false;
   bool HasSC = false;
-  bool IsConditional = false;
 
-  for (unsigned I = 0; I < InlineAsmInstructionsRecord.size(); ++I) {
-    const InlineAsmLineInstrRecord &Record = InlineAsmInstructionsRecord[I];
-
-    if (lrsc::isLR(Record.Opc)) {
+  for (const InlineAsmLineInstrRecord &Record : InlineAsmInstructionsRecords) {
+    if (lrsc::isLR(Record.Opc))
       HasLR = true;
-
-      unsigned J = I;
-      while (J + 1 < InlineAsmInstructionsRecord.size()) {
-        const InlineAsmLineInstrRecord &NextRecord =
-            InlineAsmInstructionsRecord[J + 1];
-
-        if (isBranchOpc(NextRecord.Opc)) {
-          IsConditional = true;
-          break;
-        } else if (lrsc::isSC(NextRecord.Opc)) {
-          IsConditional = false;
-          break;
-        }
-
-        ++J;
-      }
-    }
 
     if (lrsc::isSC(Record.Opc))
       HasSC = true;
@@ -818,9 +915,10 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
     LLVM_DEBUG(dbgs() << "[rewire][unsupported] parsed records do not contain "
                          "both LR and SC; "
                       << "leaving original INLINEASM unchanged\n");
-    return;
+    return false;
   }
 
+  /* Gather the parent function, source location, IR block, and register info. */
   MachineFunction *MF = MBB.getParent();
   DebugLoc DL = MBBI->getDebugLoc();
   const BasicBlock *LLVM_BB = MBB.getBasicBlock();
@@ -878,92 +976,87 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
                  << printReg(R, TRI) << "\n");
     }
   }
+  /*
+  For block starts : {0, 2, 4}
+  -> record 0 -> MBB A
+     record 1 -> MBB A
 
-  // Create three new blocks: LR, SC, and Tail.
-  MachineBasicBlock *LR_MBB = nullptr;
-  MachineBasicBlock *SC_MBB = nullptr;
-  MachineBasicBlock *TailMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+     record 2 -> MBB B
+     record 3 -> MBB B
+
+     record 4 -> TailMBB
+  */
+  /* Create the record-to-block map and retain every generated inline-asm block. */
+  // map each record index to the MBB that will contain it after the split
+  std::map<int, MachineBasicBlock *> RecordIndexToMBB;
+  SmallVector<MachineBasicBlock *, 8> InlineAsmMBBs;
 
   MachineFunction::iterator InsertPt = std::next(MBB.getIterator());
 
-  if (IsConditional) {
-    LR_MBB = MF->CreateMachineBasicBlock(LLVM_BB);
-    SC_MBB = MF->CreateMachineBasicBlock(LLVM_BB);
+  /* Create one MachineBasicBlock for each interval between block boundaries. */
+  for (size_t BlockIndex = 0; BlockIndex + 1 < BlockStartRecordIndices.size(); ++BlockIndex) {
 
-    MF->insert(InsertPt, LR_MBB);
-    MF->insert(std::next(LR_MBB->getIterator()), SC_MBB);
-    MF->insert(std::next(SC_MBB->getIterator()), TailMBB);
-  } else {
-    MF->insert(InsertPt, TailMBB);
+    int StartRecordIndex = BlockStartRecordIndices[BlockIndex];
+    int EndRecordIndex = BlockStartRecordIndices[BlockIndex + 1];
+
+    MachineBasicBlock *NewMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+    // insert immediately after MBB
+    MF->insert(InsertPt, NewMBB);
+    InsertPt = std::next(NewMBB->getIterator());
+
+    InlineAsmMBBs.push_back(NewMBB);
+
+    for (int RecordIndex = StartRecordIndex; RecordIndex < EndRecordIndex;++RecordIndex) {
+      RecordIndexToMBB[RecordIndex] = NewMBB;
+    }
   }
 
-  LLVM_DEBUG(dbgs() << "[rewire] created LR_MBB=" << LR_MBB
-                    << " SC_MBB=" << SC_MBB << " TailMBB=" << TailMBB << "\n");
+  /* Create the tail block that receives instructions following the INLINEASM. */
+  MachineBasicBlock *TailMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+
+  MF->insert(InsertPt, TailMBB);
+
+  RecordIndexToMBB[NumRecords] = TailMBB;
 
   // ------------------------------------------------------------
   // Copy original live-ins manually.
   // ------------------------------------------------------------
   for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins()) {
-    if (IsConditional) {
-      if (!LR_MBB->isLiveIn(LI.PhysReg)) {
-        LR_MBB->addLiveIn(LI.PhysReg, LI.LaneMask);
-      }
 
-      if (!SC_MBB->isLiveIn(LI.PhysReg)) {
-        SC_MBB->addLiveIn(LI.PhysReg, LI.LaneMask);
-      }
+    for (MachineBasicBlock *InlineAsmMBB : InlineAsmMBBs) {
+      if (!InlineAsmMBB->isLiveIn(LI.PhysReg))
+        InlineAsmMBB->addLiveIn(LI.PhysReg, LI.LaneMask);
     }
 
     if (!TailMBB->isLiveIn(LI.PhysReg))
       TailMBB->addLiveIn(LI.PhysReg, LI.LaneMask);
 
-    LLVM_DEBUG(dbgs() << "[rewire] copied original live-in to new blocks: "
+    LLVM_DEBUG(dbgs() << "[rewire] copied original live-in to generated blocks: "
                       << printReg(LI.PhysReg, TRI) << "\n");
   }
 
   // ------------------------------------------------------------
-  // Add parsed inline-asm physical registers as live-ins conservatively.
+  // Add parsed inline-asm physical input registers as live-ins conservatively.
   // ------------------------------------------------------------
-  for (const InlineAsmLineInstrRecord &Record : InlineAsmInstructionsRecord) {
+  for (const InlineAsmLineInstrRecord &Record : InlineAsmInstructionsRecords) {
     for (const InlineAsmOperand &Op : Record.Operands) {
-      LLVM_DEBUG({
-        dbgs() << "[rewire][livein-check] Op.Reg=" << printReg(Op.Reg, TRI)
-               << " Kind=" << Op.Kind << "\n";
-      });
-      if ((Op.Kind == InlineAsmOperand::OK_Reg ||
-           Op.Kind == InlineAsmOperand::OK_DefReg) &&
-          Op.Reg.isPhysical()) {
+      LLVM_DEBUG({dbgs() << "[rewire][livein-check] Op.Reg=" << printReg(Op.Reg, TRI)
+              << " Kind=" << Op.Kind << "\n";});
 
-        if (IsConditional) {
-          if (!LR_MBB->isLiveIn(Op.Reg)) {
-            LR_MBB->addLiveIn(Op.Reg);
-            LLVM_DEBUG(dbgs()
-                       << "[rewire] added parsed physreg live-in to LR_MBB: "
-                       << printReg(Op.Reg, TRI) << "\n");
-          }
+      if (Op.Kind == InlineAsmOperand::OK_Reg && Op.Reg.isPhysical()) {
 
-          if (!SC_MBB->isLiveIn(Op.Reg)) {
-            SC_MBB->addLiveIn(Op.Reg);
-            LLVM_DEBUG(dbgs()
-                       << "[rewire] added parsed physreg live-in to SC_MBB: "
-                       << printReg(Op.Reg, TRI) << "\n");
+        for (MachineBasicBlock *InlineAsmMBB : InlineAsmMBBs) {
+          if (!InlineAsmMBB->isLiveIn(Op.Reg)){
+            InlineAsmMBB->addLiveIn(Op.Reg);
           }
         }
 
-        if (!MBB.isLiveIn(Op.Reg)) {
-          MBB.addLiveIn(Op.Reg);
-          LLVM_DEBUG(
-              dbgs()
-              << "[rewire] added parsed physreg live-in to original MBB: "
-              << printReg(Op.Reg, TRI) << "\n");
-        }
-
-        if (!TailMBB->isLiveIn(Op.Reg))
+        if (!TailMBB->isLiveIn(Op.Reg)){
           TailMBB->addLiveIn(Op.Reg);
+        }
 
-        LLVM_DEBUG(
-            dbgs() << "[rewire] added parsed inline-asm physreg live-in: "
-                   << printReg(Op.Reg, TRI) << "\n");
+        LLVM_DEBUG(dbgs() << "[rewire] added parsed inline-asm physreg live-in: "
+                  << printReg(Op.Reg, TRI) << "\n");
       }
     }
   }
@@ -977,22 +1070,18 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   // where $x10 was defined before the INLINEASM in the original MBB.
   // ------------------------------------------------------------
   for (Register R : TailUsedPhysRegs) {
-    if (IsConditional) {
-      if (!LR_MBB->isLiveIn(R)) {
-        LR_MBB->addLiveIn(R);
-      }
 
-      if (!SC_MBB->isLiveIn(R)) {
-        SC_MBB->addLiveIn(R);
-      }
+    for (MachineBasicBlock *InlineAsmMBB : InlineAsmMBBs) {
+      if (!InlineAsmMBB->isLiveIn(R))
+        InlineAsmMBB->addLiveIn(R);
     }
 
     if (!TailMBB->isLiveIn(R))
       TailMBB->addLiveIn(R);
 
     LLVM_DEBUG(
-        dbgs() << "[rewire] added tail-used physreg live-in to LR/SC/Tail: "
-               << printReg(R, TRI) << "\n");
+        dbgs() << "[rewire] added tail-used physreg live-in to generated blocks: "
+              << printReg(R, TRI) << "\n");
   }
 
   // Move everything AFTER the INLINEASM into TailMBB.
@@ -1001,6 +1090,7 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   LLVM_DEBUG(dbgs() << "[rewire] About to splice instructions after INLINEASM "
                        "into TailMBB\n");
 
+  /* Move the original post-INLINEASM instruction range into the new tail. */
   TailMBB->splice(TailMBB->end(), &MBB, std::next(MBBI), MBB.end());
 
   LLVM_DEBUG(
@@ -1010,6 +1100,7 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   LLVM_DEBUG(dbgs() << "[rewire] About to transfer successors from original "
                        "MBB to TailMBB\n");
 
+  /* Transfer the old outgoing edges and repair successor PHI operands. */
   TailMBB->transferSuccessorsAndUpdatePHIs(&MBB);
 
   LLVM_DEBUG(
@@ -1019,54 +1110,44 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   // Erase the original INLINEASM. Everything before it stays in MBB.
   LLVM_DEBUG(dbgs() << "[rewire] About to erase original INLINEASM\n");
 
+  /* Remove the opaque instruction now that its replacement blocks exist. */
   MBB.erase(MBBI);
 
   LLVM_DEBUG(dbgs() << "[rewire] erased original INLINEASM\n");
-  if (IsConditional) {
-    // Original MBB now branches to LR_MBB.
-    LLVM_DEBUG(
-        dbgs()
-        << "[rewire] About to insert PseudoBR from original MBB to LR_MBB\n");
+  
+  // Original MBB now branches to the first inline-asm block.
+  /* Look up the generated block containing the first parsed instruction. */
+  MachineBasicBlock *EntryMBB = RecordIndexToMBB[0];
 
-    BuildMI(&MBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(LR_MBB);
+  LLVM_DEBUG(dbgs()
+      << "[rewire] About to insert PseudoBR from original MBB to entry MBB #"
+      << EntryMBB->getNumber() << "\n");
 
-    LLVM_DEBUG(
-        dbgs() << "[rewire] inserted PseudoBR from original MBB to LR_MBB\n");
+  /* Emit an explicit jump from the original block into the expanded sequence. */
+  BuildMI(&MBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(EntryMBB);
 
-    // Now emit parsed instructions into LR_MBB, SC_MBB, or TailMBB.
-  }
+  LLVM_DEBUG(dbgs() << "[rewire] inserted PseudoBR from original MBB to entry MBB #"
+            << EntryMBB->getNumber() << "\n");
 
-  bool SeenSC = false;
+  /* Materialize each parsed instruction in the block assigned to its record. */
+  for (int I = 0; I < NumRecords; ++I) {
+    const InlineAsmLineInstrRecord &Record =
+        InlineAsmInstructionsRecords[I];
 
-  for (const InlineAsmLineInstrRecord &Record : InlineAsmInstructionsRecord) {
-    if (lrsc::isSC(Record.Opc))
-      SeenSC = true;
+    MachineBasicBlock *DstMBB = RecordIndexToMBB[I];
 
-    MachineBasicBlock *DstMBB = nullptr;
 
-    if (IsConditional) {
-      DstMBB = SeenSC ? SC_MBB : LR_MBB;
-    } else {
-      DstMBB = &MBB;
-    }
 
-    if (Record.Opc == RISCV::FENCE) {
-      LLVM_DEBUG(dbgs() << "[rewire] routing FENCE to beginning of TailMBB\n");
-      DstMBB = TailMBB;
-    }
+    LLVM_DEBUG(dbgs() << "[rewire] About to BuildMI record=" << I
+                  << " opcode=" << Record.Opc
+                  << " DstMBB #" << DstMBB->getNumber() << "\n");
 
-    LLVM_DEBUG(dbgs() << "[rewire] About to BuildMI opcode=" << Record.Opc
-                      << " DstMBB #" << DstMBB->getNumber()
-                      << " SeenSC=" << SeenSC << "\n");
-
-    MachineInstrBuilder MIB =
-        (Record.Opc == RISCV::FENCE)
-            ? BuildMI(*TailMBB, TailMBB->begin(), DL, TII->get(Record.Opc))
-            : BuildMI(*DstMBB, DstMBB->end(), DL, TII->get(Record.Opc));
+    MachineInstrBuilder MIB = BuildMI(*DstMBB, DstMBB->end(), DL, TII->get(Record.Opc));
 
     LLVM_DEBUG(dbgs() << "[rewire] About to add operands for opcode="
                       << Record.Opc << "\n");
 
+    /* Translate parsed operand kinds into MachineInstrBuilder operands. */
     for (const InlineAsmOperand &Op : Record.Operands) {
       switch (Op.Kind) {
       case InlineAsmOperand::OK_Reg:
@@ -1087,28 +1168,37 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
       }
 
       case InlineAsmOperand::OK_Imm:
-        MIB.addImm(Op.Imm);
-        LLVM_DEBUG(dbgs() << "[rewire]   addImm " << Op.Imm << "\n");
-        break;
-      }
-    }
+        if(!isBranchOpc(Record.Opc)){
+          LLVM_DEBUG(dbgs() << "[isBranchOpc] Returning false for isBranch" << Record.Opc << "\n");
+          MIB.addImm(Op.Imm);
+          LLVM_DEBUG(dbgs() << "[rewire]   addImm " << Op.Imm << "\n");
 
-    if (isBranchOpc(Record.Opc)) {
-      if (IsConditional) {
-        if (DstMBB == LR_MBB) {
-          LLVM_DEBUG(dbgs() << "[rewire] adding branch target TailMBB\n");
-          MIB.addMBB(TailMBB);
-        } else {
-          LLVM_DEBUG(dbgs() << "[rewire] adding branch target LR_MBB\n");
-          MIB.addMBB(LR_MBB);
         }
-      } else {
-        LLVM_DEBUG(dbgs() << "[rewire] adding branch target MBB for "
-                             "unconditional LR retry loop\n");
-        MIB.addMBB(&MBB);
+        break;
+      case InlineAsmOperand::OK_Invalid:
+        llvm_unreachable("invalid inline asm operand reached emission");
+        
       }
     }
 
+    /* Resolve a recorded branch label and append its MachineBasicBlock operand. */
+    if (isBranchOpc(Record.Opc)) {
+      int TargetRecordIndex =
+          resolveBranchTarget(Record.BranchTarget, I);
+
+      MachineBasicBlock *TargetMBB =
+          RecordIndexToMBB[TargetRecordIndex];
+
+      LLVM_DEBUG(
+          dbgs() << "[rewire] branch '" << Record.BranchTarget
+                << "' from record " << I
+                << " targets record " << TargetRecordIndex
+                << " / MBB #" << TargetMBB->getNumber() << "\n");
+
+      MIB.addMBB(TargetMBB);
+    }
+
+    /* Dump the completed instruction and compare descriptor operand counts. */
     LLVM_DEBUG({
       dbgs() << "[rewire] Built MI: ";
       MIB->dump();
@@ -1130,79 +1220,102 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
   //   SC_MBB -> LR_MBB      bnez retry
   //   SC_MBB -> TailMBB     fallthrough success
   //
+
   LLVM_DEBUG(dbgs() << "[rewire] About to add CFG successors\n");
 
-  if (IsConditional) {
-    MBB.addSuccessor(LR_MBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added MBB -> LR_MBB\n");
+  /* Add the CFG edge corresponding to the explicit entry jump. */
+  // The original MBB enters the first inline-asm block.
+  // MachineBasicBlock *EntryMBB = RecordIndexToMBB[0];
+  MBB.addSuccessor(EntryMBB);
 
-    LR_MBB->addSuccessor(SC_MBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added LR_MBB -> SC_MBB\n");
+  LLVM_DEBUG(
+      dbgs() << "[rewire] Added original MBB -> inline-asm entry MBB #"
+            << EntryMBB->getNumber() << "\n");
 
-    LR_MBB->addSuccessor(TailMBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added LR_MBB -> TailMBB\n");
+  /* Derive each generated block's branch-target and fallthrough successors. */
+  for (size_t BlockIndex = 0; BlockIndex + 1 < BlockStartRecordIndices.size(); ++BlockIndex) {
 
-    SC_MBB->addSuccessor(LR_MBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added SC_MBB -> LR_MBB\n");
+    int StartRecordIndex = BlockStartRecordIndices[BlockIndex];
+    int EndRecordIndex = BlockStartRecordIndices[BlockIndex + 1];
 
-    SC_MBB->addSuccessor(TailMBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added SC_MBB -> TailMBB\n");
+    MachineBasicBlock *SrcMBB = RecordIndexToMBB[StartRecordIndex];
 
-    LLVM_DEBUG({
-      dbgs() << "[rewire] Final original MBB dump:\n";
-      MBB.dump();
+    MachineBasicBlock *FallthroughMBB = RecordIndexToMBB[EndRecordIndex];
 
-      dbgs() << "[rewire] Final LR_MBB dump:\n";
-      LR_MBB->dump();
+    int LastRecordIndex = EndRecordIndex - 1;
 
-      dbgs() << "[rewire] Final SC_MBB dump:\n";
-      SC_MBB->dump();
+    const InlineAsmLineInstrRecord &LastRecord = InlineAsmInstructionsRecords[LastRecordIndex];
 
-      dbgs() << "[rewire] Final TailMBB dump:\n";
-      TailMBB->dump();
-    });
-  } else {
+    if (isConditionalBranchOpc(LastRecord.Opc)) {
+      int TargetRecordIndex = resolveBranchTarget(LastRecord.BranchTarget, LastRecordIndex);
 
-    MBB.addSuccessor(&MBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added MBB -> MBB\n");
+      MachineBasicBlock *TargetMBB = RecordIndexToMBB[TargetRecordIndex];
 
-    MBB.addSuccessor(TailMBB);
-    LLVM_DEBUG(dbgs() << "[rewire] Added MBB -> TailMBB\n");
-  }
+      SrcMBB->addSuccessor(TargetMBB);
 
-  LLVM_DEBUG(dbgs() << "[rewire] EXIT inlineAsmToMachineInstrsRewireCFG\n");
+      LLVM_DEBUG(dbgs() << "[rewire] Added conditional branch successor MBB #"
+                        << SrcMBB->getNumber()
+                        << " -> MBB #" << TargetMBB->getNumber() << "\n");
+
+      if (TargetMBB != FallthroughMBB) {
+        SrcMBB->addSuccessor(FallthroughMBB);
+
+        LLVM_DEBUG(dbgs() << "[rewire] Added conditional fallthrough successor MBB #"
+                          << SrcMBB->getNumber()
+                          << " -> MBB #" << FallthroughMBB->getNumber() << "\n");
+      }
+    } else if (isUnconditionalBranchOpc(LastRecord.Opc)) {
+      int TargetRecordIndex = resolveBranchTarget(LastRecord.BranchTarget, LastRecordIndex);
+
+      MachineBasicBlock *TargetMBB = RecordIndexToMBB[TargetRecordIndex];
+
+      SrcMBB->addSuccessor(TargetMBB);
+
+      LLVM_DEBUG(dbgs() << "[rewire] Added unconditional branch successor MBB #"
+                        << SrcMBB->getNumber()
+                        << " -> MBB #" << TargetMBB->getNumber() << "\n");
+    } else {
+      SrcMBB->addSuccessor(FallthroughMBB);
+
+      LLVM_DEBUG(dbgs() << "[rewire] Added fallthrough successor MBB #"
+                        << SrcMBB->getNumber()
+                        << " -> MBB #" << FallthroughMBB->getNumber() << "\n");
+    }
+}
+
+  /* Report final live-in sets for the source, generated, and tail blocks. */
   LLVM_DEBUG({
     dbgs() << "[rewire] Final original MBB liveins:";
     for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins())
       dbgs() << " " << printReg(LI.PhysReg, TRI);
     dbgs() << "\n";
 
+    for (MachineBasicBlock *InlineAsmMBB : InlineAsmMBBs) {
+      dbgs() << "[rewire] Final inline-asm MBB #"
+            << InlineAsmMBB->getNumber() << " liveins:";
+
+      for (const MachineBasicBlock::RegisterMaskPair &LI :
+          InlineAsmMBB->liveins())
+        dbgs() << " " << printReg(LI.PhysReg, TRI);
+
+      dbgs() << "\n";
+    }
+
     dbgs() << "[rewire] Final TailMBB liveins:";
     for (const MachineBasicBlock::RegisterMaskPair &LI : TailMBB->liveins())
       dbgs() << " " << printReg(LI.PhysReg, TRI);
     dbgs() << "\n";
-
-    if (IsConditional) {
-      dbgs() << "[rewire] Final LR_MBB liveins:";
-      for (const MachineBasicBlock::RegisterMaskPair &LI : LR_MBB->liveins())
-        dbgs() << " " << printReg(LI.PhysReg, TRI);
-      dbgs() << "\n";
-
-      dbgs() << "[rewire] Final SC_MBB liveins:";
-      for (const MachineBasicBlock::RegisterMaskPair &LI : SC_MBB->liveins())
-        dbgs() << " " << printReg(LI.PhysReg, TRI);
-      dbgs() << "\n";
-    }
   });
+  /* Report that the INLINEASM and its CFG were successfully replaced. */
+  return true;
 }
 
 /*--------------------------------------------------------------------------*/
 /* buildInlineAsmLineRecords:
    Parses a single line of expanded inline assembly text and appends a
-   corresponding InlineAsmLineInstrRecord to InlineAsmInstructionsRecord.
-   - Line: One trimmed line of asm text (comments and leading labels already
-           removed by the caller's split loop, though this function also
-           strips them defensively).
+   corresponding InlineAsmLineInstrRecord to InlineAsmInstructionsRecords.
+   - Line: One line of asm text that may still contain a trailing comment or a
+           leading label; this function strips and records those parts.
 
    Processing steps:
      1. Strips any trailing '#' comment from the line.
@@ -1211,18 +1324,19 @@ void RISCVExpandINLINEASM::inlineAsmToMachineInstrsRewireCFG(
      3. Skips pure label-only lines (e.g. ".Ltmp0:" or "1:").
      4. Splits the line into a mnemonic and the remaining operand text.
      5. Calls mnemonicToOpcode() to map the mnemonic to a RISC-V opcode; if
-        the mnemonic is unrecognised, returns without adding a record.
+        the mnemonic is unrecognised, marks the complete parse as failed.
      6. Splits the operand text on commas and calls parseOperand() for each
         token, skipping branch-target tokens (local labels / Nf/Nb refs)
         because those are resolved from CFG context by the caller.
      7. For zero-register branches (bnez / beqz / bltz), synthesizes an
         explicit X0 operand after the first source register so BuildMI
         receives the full two-source-register form expected by BNE/BEQ/BLT.
-     8. Pushes the completed record onto InlineAsmInstructionsRecord. */
+     8. Pushes the completed record onto InlineAsmInstructionsRecords. */
 void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
   LLVM_DEBUG(dbgs() << "\n[record] ENTER buildInlineAsmLineRecords line='"
                     << Line << "'\n");
 
+  /* Remove a trailing assembly comment and normalize surrounding whitespace. */
   // Strip trailing comment.
   if (auto H = Line.find('#'); H != StringRef::npos)
     Line = Line.substr(0, H);
@@ -1236,41 +1350,53 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
     return;
   }
 
-  // Strip leading local asm label when label and instruction are on same line.
-  // Example:
-  //   "0:      lr.w X11, (X10)"
-  // becomes:
-  //   "lr.w X11, (X10)"
-  size_t Colon = Line.find(':');
-  if (Colon != StringRef::npos) {
-    StringRef MaybeLabel = Line.substr(0, Colon).trim();
+  
+  /* Find a label separator while ignoring colons inside braced expressions. */
+  size_t Colon = StringRef::npos;
+  unsigned BraceDepth = 0;
 
-    bool IsNumericLocalLabel = !MaybeLabel.empty();
-    for (char C : MaybeLabel) {
-      if (!std::isdigit(static_cast<unsigned char>(C))) {
-        IsNumericLocalLabel = false;
-        break;
-      }
-    }
-
-    bool IsDotLocalLabel = MaybeLabel.starts_with(".");
-
-    if (IsNumericLocalLabel || IsDotLocalLabel) {
-      LLVM_DEBUG(dbgs() << "[record] stripping leading label '" << MaybeLabel
-                        << "' from line: '" << Line << "'\n");
-
-      Line = Line.substr(Colon + 1).trim();
-
-      LLVM_DEBUG(dbgs() << "[record] line after label strip: '" << Line
-                        << "'\n");
-
-      if (Line.empty()) {
-        LLVM_DEBUG(dbgs() << "[record] label-only line after strip, return\n");
-        return;
-      }
+  for (size_t I = 0; I < Line.size(); ++I) {
+    if (Line[I] == '{') {
+      ++BraceDepth;
+    } else if (Line[I] == '}') {
+      if (BraceDepth != 0)
+        --BraceDepth;
+    } else if (Line[I] == ':' && BraceDepth == 0) {
+      Colon = I;
+      break;
     }
   }
 
+  /* Record a leading label at the index of the instruction that follows it. */
+  if (Colon != StringRef::npos) {
+    StringRef MaybeLabel = Line.substr(0, Colon).trim();
+
+    bool IsLabel =
+        !MaybeLabel.empty() &&
+        MaybeLabel.find_first_of(" \t,") == StringRef::npos;
+
+    if (IsLabel) {
+      InlineAsmLabelRecord Label;
+      Label.Name = MaybeLabel.str();
+
+      // This label points to the next instruction record.
+      Label.RecordIndex = InlineAsmInstructionsRecords.size();
+
+      InlineAsmLabels.push_back(std::move(Label));
+
+      LLVM_DEBUG(
+          dbgs() << "[record] recorded label '" << MaybeLabel
+                << "' at record index "
+                << InlineAsmInstructionsRecords.size() << "\n");
+
+      Line = Line.substr(Colon + 1).trim();
+
+      if (Line.empty())
+        return;
+    }
+  }
+
+  /* Ignore a remaining line that consists only of a label definition. */
   // Skip pure label lines like ".Ltmp0:" or "0:".
   if (Line.ends_with(":") &&
       Line.drop_back().find_first_of(" \t,") == StringRef::npos) {
@@ -1278,6 +1404,7 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
     return;
   }
 
+  /* Separate the mnemonic from the comma-delimited operand text. */
   // Split mnemonic from rest.
   size_t WS = Line.find_first_of(" \t");
   StringRef Mnemonic = (WS == StringRef::npos) ? Line : Line.substr(0, WS);
@@ -1286,6 +1413,7 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
   LLVM_DEBUG(dbgs() << "[record] Mnemonic='" << Mnemonic << "' Rest='" << Rest
                     << "'\n");
 
+  /* Convert the mnemonic and fail the complete parse if it is unsupported. */
   InlineAsmLineInstrRecord Rec;
   LLVM_DEBUG(dbgs() << "[record] About to map mnemonic to opcode\n");
   Rec.Opc = mnemonicToOpcode(Mnemonic);
@@ -1296,16 +1424,29 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
                << Mnemonic << "' from line: '" << Line << "'\n");
     LLVM_DEBUG(
         dbgs() << "[record][unsupported] returning without adding a record\n");
+    InlineAsmParsingFailed = true;
     return;
   }
 
+  /* Detect aliases whose second source operand is implicitly the zero register. */
   bool IsZeroBranch =
       (Mnemonic == "bnez" || Mnemonic == "beqz" || Mnemonic == "bltz");
+  LLVM_DEBUG(
+    dbgs() << "[record] IsZeroBranch=" << IsZeroBranch << "\n");    
 
+  /* Split the remaining text into the instruction's individual operands. */
   SmallVector<StringRef, 4> Toks;
   Rest.split(Toks, ',');
   LLVM_DEBUG(dbgs() << "[record] token count=" << Toks.size() << "\n");
 
+  /* Supply the implicit return-address definition used by one-operand jal. */
+  if (Mnemonic == "jal" && Toks.size() == 1) {
+    InlineAsmOperand Dst;
+    Dst.Kind = InlineAsmOperand::OK_DefReg;
+    Dst.Reg = RISCV::X1;
+    Rec.Operands.push_back(Dst);
+  }
+  /* Parse each explicit operand or capture the final branch-target token. */
   for (unsigned I = 0; I < Toks.size(); ++I) {
     StringRef Tok = Toks[I].trim();
     LLVM_DEBUG(dbgs() << "[record] token #" << I << " raw='" << Toks[I]
@@ -1313,33 +1454,127 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
     if (Tok.empty())
       continue;
 
+    /* Preserve branch labels separately so they can become MBB operands later. */
     // Drop the branch target operand — caller resolves it from CFG context.
-    if (isBranchMnemonic(Mnemonic) && isBranchTargetTok(Tok))
+    if (isBranchMnemonic(Mnemonic) && I == Toks.size() - 1) {
+      Rec.BranchTarget = Tok.str();
       continue;
+    }
 
+    /* Identify instructions whose second token uses offset(base) addressing. */
+    bool IsLoadStore =
+        Mnemonic == "lb"  || Mnemonic == "lh"  ||
+        Mnemonic == "lw"  || Mnemonic == "ld"  ||
+        Mnemonic == "lbu" || Mnemonic == "lhu" ||
+        Mnemonic == "lwu" ||
+        Mnemonic == "sb"  || Mnemonic == "sh"  ||
+        Mnemonic == "sw"  || Mnemonic == "sd";
+
+    bool IsOffsetBaseOperand =
+        IsLoadStore || Mnemonic == "jalr";
+
+    /* Decompose an offset(base) token into a base-register and offset operand. */
+    if (IsOffsetBaseOperand && I == 1) {
+      size_t LParen = Tok.find('(');
+
+      if (LParen == StringRef::npos || !Tok.ends_with(")")) {
+        LLVM_DEBUG(
+            dbgs() << "[record][unsupported] invalid load/store memory operand: '"
+                  << Tok << "'\n");
+        InlineAsmParsingFailed = true;
+        return;
+      }
+
+      StringRef OffsetText = Tok.substr(0, LParen).trim();
+
+      StringRef BaseText =
+          Tok.substr(LParen + 1, Tok.size() - LParen - 2).trim();
+
+      Register BaseReg = parseRegName(BaseText);
+
+      if (!BaseReg.isValid()) {
+        LLVM_DEBUG(
+            dbgs() << "[record][unsupported] invalid load/store base register: '"
+                  << BaseText << "'\n");
+        InlineAsmParsingFailed = true;
+        return;
+      }
+
+      int64_t Offset = 0;
+
+      if (!OffsetText.empty() &&
+          OffsetText.getAsInteger(0, Offset)) {
+        LLVM_DEBUG(
+            dbgs() << "[record][unsupported] invalid load/store offset: '"
+                  << OffsetText << "'\n");
+        InlineAsmParsingFailed = true;
+        return;
+      }
+
+      InlineAsmOperand BaseOp;
+      BaseOp.Kind = InlineAsmOperand::OK_Reg;
+      BaseOp.Reg = BaseReg;
+
+      InlineAsmOperand OffsetOp;
+      OffsetOp.Kind = InlineAsmOperand::OK_Imm;
+      OffsetOp.Imm = Offset;
+
+      Rec.Operands.push_back(BaseOp);
+      Rec.Operands.push_back(OffsetOp);
+
+      LLVM_DEBUG(
+          dbgs() << "[record] parsed load/store address base="
+                << BaseReg << " offset=" << Offset << "\n");
+
+      continue;
+    }
+    /* Parse an ordinary register, immediate, fence, or LR/SC address operand. */
     LLVM_DEBUG(dbgs() << "[record] About to parse operand token='" << Tok
                       << "' opIdx=" << I << "\n");
-    Rec.Operands.push_back(parseOperand(Tok, Mnemonic, I));
-    LLVM_DEBUG(dbgs() << "[record] Rec operands now=" << Rec.Operands.size()
-                      << "\n");
 
+    InlineAsmOperand ParsedOp = parseOperand(Tok, Mnemonic, I);
+
+    if (ParsedOp.Kind == InlineAsmOperand::OK_Invalid) {
+      LLVM_DEBUG(
+          dbgs() << "[record][unsupported] failed to parse operand '"
+                << Tok << "' for mnemonic '" << Mnemonic << "'\n");
+
+      InlineAsmParsingFailed = true;
+      return;
+    }
+    Rec.Operands.push_back(ParsedOp);
+
+    LLVM_DEBUG(dbgs() << "[record] Rec operands now="
+                      << Rec.Operands.size() << "\n");
+
+    /* Expand zero-branch aliases into the two-register form expected by BuildMI. */
     // For bnez/beqz: synthesize the implicit zero register after the first op.
     if (IsZeroBranch && I == 0) {
       InlineAsmOperand Z;
       Z.Kind = InlineAsmOperand::OK_Reg;
       Z.Reg = RISCV::X0;
-      Z.Imm = 0;
       Rec.Operands.push_back(Z);
       LLVM_DEBUG(
           dbgs() << "[record] Synthesized zero operand for zero-branch\n");
     }
   }
 
+  /* Reject a branch record whose target token was absent or not recognized. */
+  if (isBranchMnemonic(Mnemonic) && Rec.BranchTarget.empty()) {
+    LLVM_DEBUG(
+        dbgs() << "[record][unsupported] branch has no recognized target: "
+              << Line << "\n");
+
+    InlineAsmParsingFailed = true;
+    return;
+  }
+
+  /* Commit the completed instruction record to the current parse result. */
   LLVM_DEBUG(dbgs() << "[record] About to push record opcode=" << Rec.Opc
                     << " operands=" << Rec.Operands.size() << "\n");
-  InlineAsmInstructionsRecord.push_back(std::move(Rec));
+  InlineAsmInstructionsRecords.push_back(std::move(Rec));
   LLVM_DEBUG(dbgs() << "[record] records total="
-                    << InlineAsmInstructionsRecord.size() << "\n");
+                    << InlineAsmInstructionsRecords.size() << "\n");
   LLVM_DEBUG(dbgs() << "[record] EXIT buildInlineAsmLineRecords\n");
 }
 
@@ -1358,23 +1593,25 @@ void RISCVExpandINLINEASM::buildInlineAsmLineRecords(StringRef Line) {
    Recognised token forms (checked in order):
      1. "(reg)"   - Memory address form used by LR/SC; strips the parentheses
                     and calls parseRegName() on the inner text. Returns
-                    OK_Reg. Falls back to OK_Imm=0 if the register is invalid.
+                    OK_Reg, or OK_Invalid if the register is invalid.
      2. fence arg - If mnemonic is "fence", encodes the ordering string
                     ("r", "w", "rw", "iorw", etc.) as a bitmask immediate via
                     encodeFenceArg() and returns OK_Imm.
      3. Numeric   - Decimal or hex integer literal; returns OK_Imm.
-     4. Register  - Calls parseRegName(); returns OK_DefReg for OpIdx==0 on
-                    lr.*\/sc.*\/sub, OK_Reg otherwise. Returns OK_Imm=0 if the
-                    register name is unrecognised. */
+     4. Register  - Calls parseRegName(); returns OK_DefReg for operand zero of
+                    a mnemonic recognized by hasDefOperand(), OK_Reg otherwise,
+                    and OK_Invalid if the register name is unrecognised. */
 InlineAsmOperand RISCVExpandINLINEASM::parseOperand(StringRef Tok,
                                                     StringRef Mnemonic,
                                                     unsigned OpIdx) {
   LLVM_DEBUG(dbgs() << "[parseOperand] ENTER Tok='" << Tok << "' Mnemonic='"
                     << Mnemonic << "' OpIdx=" << OpIdx << "\n");
+  /* Initialize a safely invalid operand before attempting each supported form. */
   InlineAsmOperand Op;
   Op.Imm = 0;
   Op.Reg = Register();
 
+  /* Parse the parenthesized base-register form used by LR and SC instructions. */
   // Memory form "(reg)" — used by lr/sc for the address.
   if (Tok.starts_with("(") && Tok.ends_with(")")) {
     Op.Kind = InlineAsmOperand::OK_Reg;
@@ -1387,13 +1624,12 @@ InlineAsmOperand RISCVExpandINLINEASM::parseOperand(StringRef Tok,
           dbgs()
           << "[parseOperand][unsupported] bad register in memory operand: '"
           << Tok << "' for mnemonic '" << Mnemonic << "'\n");
-      Op.Kind = InlineAsmOperand::OK_Imm;
-      Op.Imm = 0;
-      return Op;
+    return InlineAsmOperand();
     }
     return Op;
   }
 
+  /* Convert a FENCE ordering token into the instruction's bitmask immediate. */
   // Fence ordering: "rw", "r", "w", "iorw", ... encoded as imm.
   if (Mnemonic == "fence") {
     LLVM_DEBUG(dbgs() << "[parseOperand] fence operand\n");
@@ -1403,6 +1639,7 @@ InlineAsmOperand RISCVExpandINLINEASM::parseOperand(StringRef Tok,
     return Op;
   }
 
+  /* Accept a numeric literal as an immediate operand. */
   // Numeric immediate.
   int64_t ImmVal;
   if (!Tok.getAsInteger(0, ImmVal)) {
@@ -1412,6 +1649,7 @@ InlineAsmOperand RISCVExpandINLINEASM::parseOperand(StringRef Tok,
     return Op;
   }
 
+  /* Resolve a symbolic register name and reject any unknown token. */
   // Register name.
   LLVM_DEBUG(dbgs() << "[parseOperand] About to parse register token='" << Tok
                     << "'\n");
@@ -1421,110 +1659,286 @@ InlineAsmOperand RISCVExpandINLINEASM::parseOperand(StringRef Tok,
   if (!R.isValid()) {
     LLVM_DEBUG(
         dbgs() << "[parseOperand][unsupported] unrecognized operand token: '"
-               << Tok << "' for mnemonic '" << Mnemonic << "'\n");
-    Op.Kind = InlineAsmOperand::OK_Imm;
-    Op.Imm = 0;
-    return Op;
+              << Tok << "' for mnemonic '" << Mnemonic << "'\n");
+    return InlineAsmOperand();
   }
 
-  bool IsDef =
-      (OpIdx == 0) && (Mnemonic.starts_with("lr.") ||
-                       Mnemonic.starts_with("sc.") || Mnemonic == "sub");
+  /* Mark operand zero as a definition when the mnemonic produces a register. */
+  bool IsDef = OpIdx == 0 && hasDefOperand(Mnemonic);
   Op.Kind = IsDef ? InlineAsmOperand::OK_DefReg : InlineAsmOperand::OK_Reg;
   Op.Reg = R;
   LLVM_DEBUG(dbgs() << "[parseOperand] returning kind=" << Op.Kind
                     << " reg=" << Op.Reg << " imm=" << Op.Imm << "\n");
   return Op;
 }
+/*--------------------------------------------------------------------------*/
+/* hasDefOperand:
+   Reports whether the first explicit operand of a mnemonic is a definition.
+   - Mnemonic: Lowercase RISC-V instruction name being parsed.
+   Covers LR/SC, integer arithmetic, immediate arithmetic, loads, JAL, and
+   JALR so parseOperand() can emit operand zero with OK_DefReg. */
+bool RISCVExpandINLINEASM::hasDefOperand(StringRef Mnemonic) {
 
+  /* Recognize atomic instructions whose first register receives a result. */
+  return Mnemonic.starts_with("lr.") ||
+      Mnemonic.starts_with("sc.") ||
+      /* Recognize register-register arithmetic and comparison definitions. */
+      Mnemonic == "add"  ||
+      Mnemonic == "sub"  ||
+      Mnemonic == "xor"  ||
+      Mnemonic == "or"   ||
+      Mnemonic == "and"  ||
+      Mnemonic == "sll"  ||
+      Mnemonic == "srl"  ||
+      Mnemonic == "sra"  ||
+      Mnemonic == "slt"  ||
+      Mnemonic == "sltu" ||
+      /* Recognize immediate arithmetic and comparison definitions. */
+      Mnemonic == "addi" ||
+      Mnemonic == "xori" ||
+      Mnemonic == "ori"  ||
+      Mnemonic == "andi" ||
+      Mnemonic == "slli" ||
+      Mnemonic == "srli" ||
+      Mnemonic == "srai" ||
+      Mnemonic == "slti" ||
+      Mnemonic == "sltiu" ||
+      /* Recognize load instructions whose first register receives memory data. */
+      Mnemonic == "lb"  ||
+      Mnemonic == "lh"  ||
+      Mnemonic == "lw"  ||
+      Mnemonic == "ld"  ||
+      Mnemonic == "lbu" ||
+      Mnemonic == "lhu" ||
+      Mnemonic == "lwu" ||
+      /* Recognize direct and indirect jumps that write a link register. */
+      Mnemonic == "jal" ||
+      Mnemonic == "jalr";
+}
 /*--------------------------------------------------------------------------*/
 /* isBranchOpc:
-   Returns true if the given RISC-V opcode is a conditional branch that this
-   pass knows how to route to a MachineBasicBlock target.
+   Returns true if the given RISC-V opcode is a conditional or unconditional
+   direct branch that this pass can route to a MachineBasicBlock target.
    - Opc: A RISC-V MC opcode value.
-   Currently recognised opcodes: BNE, BEQ, BLT.
    Used to decide whether an InlineAsmLineInstrRecord needs a MBB operand
    appended during CFG rewiring, and to detect whether the LR/SC sequence
    contains a conditional path between the LR and SC instructions. */
 bool RISCVExpandINLINEASM::isBranchOpc(unsigned Opc) {
-  LLVM_DEBUG(dbgs() << "[isBranchOpc] Opc=" << Opc << "\n");
-  return Opc == RISCV::BNE || Opc == RISCV::BEQ || Opc == RISCV::BLT;
+  /* Combine the supported conditional and unconditional direct-branch sets. */
+  return isConditionalBranchOpc(Opc) ||
+         isUnconditionalBranchOpc(Opc);
 }
+/*--------------------------------------------------------------------------*/
+/* isConditionalBranchOpc:
+   Reports whether an opcode is a supported conditional RISC-V branch.
+   - Opc: Opcode checked against the BEQ/BNE and signed or unsigned relational
+          branch families.
+   Returns false for all non-conditional and unsupported opcodes. */
+bool RISCVExpandINLINEASM::isConditionalBranchOpc(unsigned Opc) {
+  switch (Opc) {
+  case RISCV::BNE:
+  case RISCV::BEQ:
+  case RISCV::BLT:
+  case RISCV::BLTU:
+  case RISCV::BGE:
+  case RISCV::BGEU:
+    return true;
+
+  default:
+    return false;
+  }
+}
+/*--------------------------------------------------------------------------*/
+/* isUnconditionalBranchOpc:
+   Reports whether an opcode is a supported unconditional direct branch.
+   - Opc: Opcode tested for the PseudoBR and JAL forms emitted by this pass.
+   JALR is excluded because its destination is a register rather than a local
+   inline-assembly label resolved to a MachineBasicBlock. */
+bool RISCVExpandINLINEASM::isUnconditionalBranchOpc(unsigned Opc) {
+  return Opc == RISCV::PseudoBR ||
+         Opc == RISCV::JAL;
+}
+
+
 
 /*--------------------------------------------------------------------------*/
 /* isBranchMnemonic:
-   Returns true if the given mnemonic string is any conditional branch
+   Returns true if the mnemonic is a conditional branch or direct jump
    instruction recognised by this pass.
    - M: Lowercase mnemonic text (e.g. "bne", "bnez", "bltz").
    Used during operand parsing to decide whether a comma-separated token
    should be tested as a branch-target label (and therefore skipped) rather
    than parsed as a register or immediate operand. */
 bool RISCVExpandINLINEASM::isBranchMnemonic(StringRef M) {
-  LLVM_DEBUG(dbgs() << "[isBranchMnemonic] M='" << M << "'\n");
-  return M == "bne" || M == "beq" || M == "bnez" || M == "beqz" || M == "blt" ||
-         M == "bltz" || M == "bge" || M == "bltu" || M == "bgeu";
+  /* Match conditional forms, zero-register aliases, and direct jump forms. */
+  return M == "bne" || M == "beq" || M == "bnez" || M == "beqz" ||
+         M == "blt" || M == "bltz" || M == "bge" ||
+         M == "bltu" || M == "bgeu" ||
+         M == "j" || M == "jal";
 }
 
 /*--------------------------------------------------------------------------*/
-/* isBranchTargetTok:
-   Returns true if the given operand token looks like an inline-asm branch
-   target that should be skipped during operand parsing.
-   - Tok: A trimmed comma-separated token from an asm line.
-   Recognised forms:
-     - Tokens starting with '.' (dot-local labels, e.g. ".Lretry").
-     - Two-character GNU numeric local label references of the form "Nf" or
-       "Nb" where N is a single digit (e.g. "1f", "2b").
-   These targets are resolved to MachineBasicBlock pointers by the CFG
-   rewiring logic rather than being emitted as literal operands. */
-bool RISCVExpandINLINEASM::isBranchTargetTok(StringRef Tok) {
-  LLVM_DEBUG(dbgs() << "[isBranchTargetTok] Tok='" << Tok << "'\n");
-  if (Tok.starts_with("."))
-    return true;
-  if (Tok.size() == 2 && isdigit((unsigned char)Tok[0]) &&
-      (Tok[1] == 'b' || Tok[1] == 'f'))
-    return true;
-  return false;
-}
+/* resolveBranchTarget:
+   Resolves an inline-assembly branch target to the instruction-record index
+   associated with its label.
+
+   Numeric directional targets:
+     - "0b" selects the nearest matching preceding label.
+     - "1f" selects the nearest matching following label.
+     -> f= forward, b=backward, N=label number.
+     Format: Nf/Nb where N is one or more digits and f/b indicates
+     direction. The label number is matched against the numeric local labels
+     recorded in InlineAsmLabels.
+
+   Named targets such as ".Lretry" select the matching named label.
+
+   Returns -1 when the target cannot be resolved. */
+  int RISCVExpandINLINEASM::resolveBranchTarget(
+      StringRef Target, int BranchRecordIndex) const {
+    /* Normalize the target and reject an empty label reference. */
+    Target = Target.trim();
+
+    if (Target.empty())
+      return -1;
+
+    /* Distinguish numeric Nf/Nb references from ordinary named labels. */
+    bool IsNumericDirectional = (Target.size() >= 2) &&
+        (Target.back() == 'b' || Target.back() == 'f') &&
+        llvm::all_of(Target.drop_back(), [](char C) {
+          return C >= '0' && C <= '9';});
+
+    /* Resolve a named label directly without applying directional rules. */
+    // Ordinary named label, such as "retry" or ".Lretry".
+    if (!IsNumericDirectional) {
+      for (const InlineAsmLabelRecord &Label : InlineAsmLabels) {
+        if (StringRef(Label.Name) == Target)
+          return Label.RecordIndex;
+      }
+
+      return -1;
+    }
+
+    /* Separate a numeric label name from its forward or backward direction. */
+    char Direction = Target.back();
+    StringRef LabelName = Target.drop_back();
+
+    /* Search backward labels from newest to oldest for the nearest match. */
+    if (Direction == 'b') {
+      for (auto It = InlineAsmLabels.rbegin(),
+                End = InlineAsmLabels.rend();
+          It != End; ++It) {
+        if (StringRef(It->Name) == LabelName &&
+            It->RecordIndex <= BranchRecordIndex)
+          return It->RecordIndex;
+      }
+
+      return -1;
+    }
+
+    /* Search forward labels in source order for the first following match. */
+    for (const InlineAsmLabelRecord &Label : InlineAsmLabels) {
+      if (StringRef(Label.Name) == LabelName &&
+          Label.RecordIndex > BranchRecordIndex)
+        return Label.RecordIndex;
+    }
+
+    return -1;
+  }
 
 /*--------------------------------------------------------------------------*/
 /* mnemonicToOpcode:
    Maps a lowercase RISC-V instruction mnemonic string to its corresponding
    RISC-V MC opcode integer.
    - M: Lowercase mnemonic text (e.g. "lr.w", "sc.d.aqrl", "bne", "fence").
-   Covers all LR/SC variants (lr.w, lr.w.aq, lr.w.rl, lr.w.aqrl, lr.d and
-   their ordering suffixes), SC equivalents, SUB, the conditional branches
-   BNE/BEQ/BLT and their zero-register pseudo forms (bnez/beqz/bltz), and
-   FENCE.
+   Covers LR/SC variants, integer arithmetic, loads and stores, conditional
+   and unconditional control transfers, branch aliases, and FENCE.
    Returns 0 for any unrecognised mnemonic, which causes the caller
-   (buildInlineAsmLineRecords) to discard the line without adding a record. */
+   (buildInlineAsmLineRecords) to reject the complete inline-asm parse. */
 unsigned RISCVExpandINLINEASM::mnemonicToOpcode(StringRef M) {
   LLVM_DEBUG(dbgs() << "[mnemonicToOpcode] M='" << M << "'\n");
-  return StringSwitch<unsigned>(M)
-      .Case("lr.w", RISCV::LR_W)
-      .Case("lr.w.aq", RISCV::LR_W_AQ)
-      .Case("lr.w.rl", RISCV::LR_W_RL)
-      .Case("lr.w.aqrl", RISCV::LR_W_AQRL)
-      .Case("lr.d", RISCV::LR_D)
-      .Case("lr.d.aq", RISCV::LR_D_AQ)
-      .Case("lr.d.rl", RISCV::LR_D_RL)
-      .Case("lr.d.aqrl", RISCV::LR_D_AQRL)
-      .Case("sc.w", RISCV::SC_W)
-      .Case("sc.w.aq", RISCV::SC_W_AQ)
-      .Case("sc.w.rl", RISCV::SC_W_RL)
-      .Case("sc.w.aqrl", RISCV::SC_W_AQRL)
-      .Case("sc.d", RISCV::SC_D)
-      .Case("sc.d.aq", RISCV::SC_D_AQ)
-      .Case("sc.d.rl", RISCV::SC_D_RL)
-      .Case("sc.d.aqrl", RISCV::SC_D_AQRL)
-      .Case("sub", RISCV::SUB)
-      .Case("bne", RISCV::BNE)
-      .Case("beq", RISCV::BEQ)
-      .Case("bnez", RISCV::BNE)
-      .Case("beqz", RISCV::BEQ)
-      .Case("bltz", RISCV::BLT)
-      .Case("blt", RISCV::BLT)
-      .Case("fence", RISCV::FENCE)
-      .Default(0);
+/* Map load-reserved mnemonics and their acquire/release variants. */
+return StringSwitch<unsigned>(M)
+    .Case("lr.w", RISCV::LR_W)
+    .Case("lr.w.aq", RISCV::LR_W_AQ)
+    .Case("lr.w.rl", RISCV::LR_W_RL)
+    .Case("lr.w.aqrl", RISCV::LR_W_AQRL)
+    .Case("lr.d", RISCV::LR_D)
+    .Case("lr.d.aq", RISCV::LR_D_AQ)
+    .Case("lr.d.rl", RISCV::LR_D_RL)
+    .Case("lr.d.aqrl", RISCV::LR_D_AQRL)
+
+    /* Map store-conditional mnemonics and their ordering variants. */
+    .Case("sc.w", RISCV::SC_W)
+    .Case("sc.w.aq", RISCV::SC_W_AQ)
+    .Case("sc.w.rl", RISCV::SC_W_RL)
+    .Case("sc.w.aqrl", RISCV::SC_W_AQRL)
+    .Case("sc.d", RISCV::SC_D)
+    .Case("sc.d.aq", RISCV::SC_D_AQ)
+    .Case("sc.d.rl", RISCV::SC_D_RL)
+    .Case("sc.d.aqrl", RISCV::SC_D_AQRL)
+
+    /* Map register-register integer arithmetic and comparison operations. */
+    // Register-register integer instructions.
+    .Case("add", RISCV::ADD)
+    .Case("sub", RISCV::SUB)
+    .Case("xor", RISCV::XOR)
+    .Case("or", RISCV::OR)
+    .Case("and", RISCV::AND)
+    .Case("sll", RISCV::SLL)
+    .Case("srl", RISCV::SRL)
+    .Case("sra", RISCV::SRA)
+    .Case("slt", RISCV::SLT)
+    .Case("sltu", RISCV::SLTU)
+
+    /* Map immediate integer arithmetic, logical, shift, and comparison forms. */
+    // Immediate integer instructions.
+    .Case("addi", RISCV::ADDI)
+    .Case("xori", RISCV::XORI)
+    .Case("ori", RISCV::ORI)
+    .Case("andi", RISCV::ANDI)
+    .Case("slli", RISCV::SLLI)
+    .Case("srli", RISCV::SRLI)
+    .Case("srai", RISCV::SRAI)
+    .Case("slti", RISCV::SLTI)
+    .Case("sltiu", RISCV::SLTIU)
+
+    /* Map integer loads and stores of the supported widths and signedness. */
+    // Loads and stores.
+    .Case("lb", RISCV::LB)
+    .Case("lh", RISCV::LH)
+    .Case("lw", RISCV::LW)
+    .Case("ld", RISCV::LD)
+    .Case("lbu", RISCV::LBU)
+    .Case("lhu", RISCV::LHU)
+    .Case("lwu", RISCV::LWU)
+
+    .Case("sb", RISCV::SB)
+    .Case("sh", RISCV::SH)
+    .Case("sw", RISCV::SW)
+    .Case("sd", RISCV::SD)
+
+    /* Map conditional branches to their target instruction opcodes. */
+    // Conditional branches.
+    .Case("bne", RISCV::BNE)
+    .Case("beq", RISCV::BEQ)
+    .Case("blt", RISCV::BLT)
+    .Case("bge", RISCV::BGE)
+    .Case("bltu", RISCV::BLTU)
+    .Case("bgeu", RISCV::BGEU)
+    /* Map unconditional control transfers. */
+    // Unconditional branches.
+    .Case("j", RISCV::PseudoBR)
+    .Case("jal", RISCV::JAL)
+    .Case("jalr", RISCV::JALR)
+    /* Lower zero-register branch aliases to their two-register base opcodes. */
+    // Branch aliases.
+    .Case("bnez", RISCV::BNE)
+    .Case("beqz", RISCV::BEQ)
+    .Case("bltz", RISCV::BLT)
+
+    /* Map memory-ordering barriers and reject every unknown mnemonic. */
+    .Case("fence", RISCV::FENCE)
+    .Default(0);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1536,11 +1950,12 @@ unsigned RISCVExpandINLINEASM::mnemonicToOpcode(StringRef M) {
    Covers all 32 integer registers (X0-X31) together with their ABI aliases
    (zero, ra, sp, gp, tp, t0-t6, s0/fp, s1-s11, a0-a7).
    Returns an invalid Register() for any unrecognised name string, which
-   causes parseOperand() to fall back to an OK_Imm=0 operand and emit an
-   [unsupported] debug message. */
+   causes parseOperand() to return an invalid operand and emit an unsupported
+   debug message. */
 Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
   LLVM_DEBUG(dbgs() << "[parseRegName] N='" << N << "'\n");
 
+  /* Map zero, return-address, stack, global, and thread-pointer names. */
   return StringSwitch<Register>(N)
       .Case("X0", RISCV::X0)
       .Case("x0", RISCV::X0)
@@ -1558,6 +1973,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x4", RISCV::X4)
       .Case("tp", RISCV::X4)
 
+      /* Map the first group of temporary-register names. */
       .Case("X5", RISCV::X5)
       .Case("x5", RISCV::X5)
       .Case("t0", RISCV::X5)
@@ -1568,6 +1984,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x7", RISCV::X7)
       .Case("t2", RISCV::X7)
 
+      /* Map frame-pointer and initial saved-register names. */
       .Case("X8", RISCV::X8)
       .Case("x8", RISCV::X8)
       .Case("s0", RISCV::X8)
@@ -1576,6 +1993,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x9", RISCV::X9)
       .Case("s1", RISCV::X9)
 
+      /* Map the eight argument and return-value register names. */
       .Case("X10", RISCV::X10)
       .Case("x10", RISCV::X10)
       .Case("a0", RISCV::X10)
@@ -1601,6 +2019,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x17", RISCV::X17)
       .Case("a7", RISCV::X17)
 
+      /* Map the remaining callee-saved register names. */
       .Case("X18", RISCV::X18)
       .Case("x18", RISCV::X18)
       .Case("s2", RISCV::X18)
@@ -1632,6 +2051,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x27", RISCV::X27)
       .Case("s11", RISCV::X27)
 
+      /* Map the final four temporary-register names. */
       .Case("X28", RISCV::X28)
       .Case("x28", RISCV::X28)
       .Case("t3", RISCV::X28)
@@ -1645,6 +2065,7 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
       .Case("x31", RISCV::X31)
       .Case("t6", RISCV::X31)
 
+      /* Return an invalid Register when no spelling matches. */
       .Default(Register());
 }
 
@@ -1664,7 +2085,9 @@ Register RISCVExpandINLINEASM::parseRegName(StringRef N) {
    passing to MachineInstrBuilder::addImm(). */
 int64_t RISCVExpandINLINEASM::encodeFenceArg(StringRef S) {
   LLVM_DEBUG(dbgs() << "[encodeFenceArg] S='" << S << "'\n");
+  /* Start with no predecessor or successor classes selected. */
   int64_t V = 0;
+  /* Accumulate the ISA-defined bit associated with each ordering character. */
   for (char C : S) {
     LLVM_DEBUG(dbgs() << "[encodeFenceArg] char='" << C << "' before V=" << V
                       << "\n");
@@ -1689,6 +2112,7 @@ int64_t RISCVExpandINLINEASM::encodeFenceArg(StringRef S) {
       break;
     }
   }
+  /* Return the completed four-bit ordering mask. */
   return V;
 }
 
@@ -1699,29 +2123,11 @@ int64_t RISCVExpandINLINEASM::encodeFenceArg(StringRef S) {
    - OS: The raw_ostream to write to (typically dbgs() from the destructor).
    Prints the module name recorded during the most recent runOnMachineFunction
    call and the number of InlineAsmLineInstrRecords that were parsed and
-   stored in InlineAsmInstructionsRecord.
+   stored in InlineAsmInstructionsRecords.
    Called unconditionally from the destructor when the
    -dump-expand-inline-asm-stat command-line flag is enabled. */
 void RISCVExpandINLINEASM::dumpStats(raw_ostream &OS) {
+  /* Print the module identity followed by the retained record count. */
   OS << "RISCVExpandINLINEASM stats for module " << ModuleName << "\n";
-  OS << "  expanded records: " << InlineAsmInstructionsRecord.size() << "\n";
-}
-
-/*--------------------------------------------------------------------------*/
-/* copyLiveInsManually:
-   Copies all live-in register/lane-mask pairs from a source MachineBasicBlock
-   to a destination MachineBasicBlock, skipping any register that is already
-   marked as live-in in the destination.
-   - Dst: The MachineBasicBlock to receive the copied live-ins.
-   - Src: The MachineBasicBlock whose live-in set is iterated.
-   Used to propagate liveness information to newly created MBBs (LR_MBB,
-   SC_MBB, TailMBB) after the original MBB is split around the INLINEASM
-   instruction, ensuring that registers live before the split remain visible
-   to register-allocation and verification passes in the new blocks. */
-void RISCVExpandINLINEASM::copyLiveInsManually(MachineBasicBlock *Dst,
-                                               const MachineBasicBlock &Src) {
-  for (const MachineBasicBlock::RegisterMaskPair &LI : Src.liveins()) {
-    if (!Dst->isLiveIn(LI.PhysReg))
-      Dst->addLiveIn(LI.PhysReg, LI.LaneMask);
-  }
+  OS << "  expanded records: " << InlineAsmInstructionsRecords.size() << "\n";
 }
