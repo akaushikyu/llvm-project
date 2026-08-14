@@ -37,12 +37,6 @@ public:
 FunctionPass *createRISCVCodeGenPrepareLegacyPass();
 void initializeRISCVCodeGenPrepareLegacyPassPass(PassRegistry &);
 
-FunctionPass *createRISCVCountLRSCPass();
-void initializeRISCVCountLRSCPass(PassRegistry &);
-
-FunctionPass *createRISCVInsertBNERDSCPass();
-void initializeRISCVInsertBNERDSCPass(PassRegistry &);
-
 FunctionPass *createRISCVDeadRegisterDefinitionsPass();
 void initializeRISCVDeadRegisterDefinitionsPass(PassRegistry &);
 
@@ -137,6 +131,15 @@ void initializeRISCVVLOptimizerPass(PassRegistry &);
 
 FunctionPass *createRISCVVMV0EliminationPass();
 void initializeRISCVVMV0EliminationPass(PassRegistry &);
+
+FunctionPass *createRISCVCountLRSCPass();
+void initializeRISCVCountLRSCPass(PassRegistry &);
+
+FunctionPass *createRISCVExpandINLINEASMPass();
+void initializeRISCVExpandINLINEASMPass(PassRegistry &);
+
+FunctionPass *createRISCVInsertBNERDSCPass();
+void initializeRISCVInsertBNERDSCPass(PassRegistry &);
 
 void initializeRISCVAsmPrinterPass(PassRegistry &);
 } // namespace llvm

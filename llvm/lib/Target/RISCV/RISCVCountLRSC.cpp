@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <tuple>
 #include <unordered_map>
 #include <algorithm>
 
@@ -70,8 +71,8 @@ private:
   /* Added MachineFunction &MF as a parameter so LR/SC counts can be
    * attributed to the containing function.
    */
-  unsigned countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB);
-  unsigned totalCount = 0;
+  std::tuple<unsigned, unsigned, unsigned> countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB);
+  
 
   /* Struct defined in LRSCCountUtils.hpp. */
   utils::LRSCCounts Counts;
@@ -97,7 +98,8 @@ RISCVCountLRSC::~RISCVCountLRSC() {
 }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
-
+  // unsigned totalCount = 0;
+  Counts.clearAll();
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
 
   /* Clear stored basic block iteration order for this MachineFunction so the
@@ -113,9 +115,9 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
    * (MF -> [basic block pointers in traversal order]) for a stable bb_index.
    */
   auto &Order = Counts.basicBlockOrder;
-
-  unsigned insnPerBBCnt = 0;
-  unsigned insnPerMFCnt = 0;
+  // <LR/SC Count, Conditional Count, Unconditional Count>
+  std:: tuple<unsigned, unsigned, unsigned> statPerBBCnt = std::make_tuple(0, 0, 0);
+  std:: tuple<unsigned, unsigned, unsigned> statPerMFCnt = std::make_tuple(0, 0, 0);
 
   /* Traverse the machine basic blocks in this MachineFunction and accumulate
    * LR/SC instruction counts per basic block and for the entire function.
@@ -136,7 +138,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     Order.push_back(&MBB);
 
     /* Number of LR/SC instructions detected in this basic block. */
-    insnPerBBCnt = countLRSC(Counts, MBB);
+    statPerBBCnt = countLRSC(Counts, MBB);
 
     /* Ensure the MF -> BB entry exists even if this basic block has zero
      * LR/SC instructions.
@@ -146,24 +148,29 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     /* Update the MF -> BB -> count mapping with the LR/SC count for this
      * basic block.
      */
-    Counts.updateBBCnt(MBB, insnPerBBCnt);
+    Counts.updateBBCnt(MBB, std::get<0>(statPerBBCnt));
 
     /* Accumulate the LR/SC count for this basic block into the total for this
      * function.
      */
-    insnPerMFCnt += insnPerBBCnt;
+    statPerMFCnt = std::make_tuple(std::get<0>(statPerMFCnt) + std::get<0>(statPerBBCnt),
+                                   std::get<1>(statPerMFCnt) + std::get<1>(statPerBBCnt),
+                                   std::get<2>(statPerMFCnt) + std::get<2>(statPerBBCnt));
   }
   
-  utils::MatchResult result = DistanceAndCycle.computeLRSCDistancesAndCycles(MF);
+  utils::MatchResult result = DistanceAndCycle.computeLRSCDistancesAndCycles(MF, Counts);
   lrsc::dump(result);
 
-  /* Accumulate the per-function LR/SC count into the total for the entire
-   * compilation unit.
-   */
-  totalCount += insnPerMFCnt;
+  // /* Accumulate the per-function LR/SC count into the total for the entire
+  //  * compilation unit.
+  //  */
+  // totalCount += std::get<0>(statPerMFCnt);
+
 
   /* Update the Func -> count mapping with the LR/SC count for this function. */
-  Counts.updateFuncCnt(insnPerMFCnt);
+  Counts.setFuncCnt(std::get<0>(statPerMFCnt));
+  Counts.setFuncLoopSeqFlavCnt(std::get<1>(statPerMFCnt), true);
+  Counts.setFuncLoopSeqFlavCnt(std::get<2>(statPerMFCnt), false);
 
   updateStats(MF);
 
@@ -173,8 +180,8 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-unsigned
-RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
+
+std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
@@ -183,7 +190,9 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
    * against all LR/SC instruction flavours, and update the per-flavour
    * counts in the LRSCCounts mapping.
    */
-  unsigned total = 0;
+  unsigned totalCountBB = 0;
+  unsigned LoopSeqConditionalCountBB = 0;
+  unsigned LoopSeqUnconditionalCountBB = 0;
   uint16_t opc = 0;
   while (MBBI != E) {
 
@@ -197,7 +206,25 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
       case RISCV::LR_D_RL:
       case RISCV::LR_W_RL:
       case RISCV::LR_D_AQRL:
-      case RISCV::LR_W_AQRL:
+      case RISCV::LR_W_AQRL:{
+        MachineBasicBlock::iterator LRMBBI = MBBI;
+        while(std::next(LRMBBI) != E){
+          
+          if(std::next(LRMBBI)->isBranch()) {
+            Counts.updateBBLoopSeqFlavCnt(MBB, true);
+            LoopSeqConditionalCountBB++;
+            break;
+          }
+          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode())) {
+            Counts.updateBBLoopSeqFlavCnt(MBB, false);
+            LoopSeqUnconditionalCountBB++;
+            break;
+          }
+          LRMBBI++;
+        }
+        
+      }
+        
       // SC flavours
       case RISCV::SC_W:
       case RISCV::SC_D:
@@ -208,7 +235,7 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
         Counts.updateBBFlavCnt(MBB, lrsc::stringifyOpcode(opc));
-        total++;
+        totalCountBB++;
         break;
 
       default:
@@ -217,7 +244,7 @@ RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
     }
       MBBI++;
   }
-  return total;
+  return std::make_tuple(totalCountBB, LoopSeqConditionalCountBB, LoopSeqUnconditionalCountBB);
 }
 
 void RISCVCountLRSC::dumpJSONStats(raw_ostream &OS) {

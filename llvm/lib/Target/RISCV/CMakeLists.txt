@@ -38,6 +38,7 @@ add_llvm_target(RISCVCodeGen
   RISCVCountLRSC.cpp
   RISCVDeadRegisterDefinitions.cpp
   RISCVExpandAtomicPseudoInsts.cpp
+  RISCVExpandINLINEASM.cpp
   RISCVExpandPseudoInsts.cpp
   RISCVFoldMemOffset.cpp
   RISCVFrameLowering.cpp
