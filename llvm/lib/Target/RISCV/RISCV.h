@@ -70,6 +70,9 @@ void initializeRISCVFoldMemOffsetPass(PassRegistry &);
 FunctionPass *createRISCVMergeBaseOffsetOptPass();
 void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
 
+FunctionPass *createRISCVPseudoBNEBranchExpansionPass();
+void initializeRISCVPseudoBNEBranchExpansionPass(PassRegistry &);
+
 FunctionPass *createRISCVExpandPseudoPass();
 void initializeRISCVExpandPseudoPass(PassRegistry &);
 

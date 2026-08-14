@@ -289,6 +289,37 @@ class PseudoMaskedAMOUMinUMax
   let hasSideEffects = 0;
 }
 
+class PseudoMaskedBNEAMOMinMax
+    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2),
+             (ins GPR:$addr, GPR:$incr, GPR:$mask, GPR:$sextshamt, 
+                  ordering:$ordering), []> {
+  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+                    "@earlyclobber $scratch2";
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 0;
+}
+class PseudoBNEAMOUMinUMax
+    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2),
+             (ins GPR:$addr, GPR:$incr, ordering:$ordering), []> {
+  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+                    "@earlyclobber $scratch2";
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 0;
+}
+class PseudoMaskedBNEAMOUMinUMax
+    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
+             (ins GPR:$addr, GPR:$incr, GPR:$mask, ordering:$ordering), []> {
+  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+                    "@earlyclobber $scratch2,"
+                    "@earlyclobber $scratch3";
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 0;
+}
+
+
 // Ordering constants must be kept in sync with the AtomicOrdering enum in
 // AtomicOrdering.h.
 multiclass PseudoAMOPat<string AtomicOp, Pseudo AMOInst, ValueType vt = XLenVT> {
@@ -316,104 +347,257 @@ class PseudoMaskedAMOMinMaxPat<Intrinsic intrin, Pseudo AMOInst>
           (AMOInst GPR:$addr, GPR:$incr, GPR:$mask, GPR:$shiftamt,
            timm:$ordering)>;
 
+//===----------------------------------------------------------------------===//
+// 32-bit unmasked atomic pseudos shared by normal and BNERD modes.
+//===----------------------------------------------------------------------===//
+
 let Predicates = [HasStdExtZalrsc, NoStdExtZaamo] in {
+  let Size = 16 in {
+    def PseudoAtomicSwap32 : PseudoAMO;
+    def PseudoAtomicLoadAdd32 : PseudoAMO;
+    def PseudoAtomicLoadSub32 : PseudoAMO;
+    def PseudoAtomicLoadAnd32 : PseudoAMO;
+    def PseudoAtomicLoadOr32 : PseudoAMO;
+    def PseudoAtomicLoadXor32 : PseudoAMO;
+  }
 
-let Size = 16 in {
-def PseudoAtomicSwap32 : PseudoAMO;
-def PseudoAtomicLoadAdd32 : PseudoAMO;
-def PseudoAtomicLoadSub32 : PseudoAMO;
-def PseudoAtomicLoadAnd32 : PseudoAMO;
-def PseudoAtomicLoadOr32 : PseudoAMO;
-def PseudoAtomicLoadXor32 : PseudoAMO;
-} // Size = 16
-let Size = 24 in {
-def PseudoAtomicLoadMax32 : PseudoAMO;
-def PseudoAtomicLoadMin32 : PseudoAMO;
-def PseudoAtomicLoadUMax32 : PseudoAMO;
-def PseudoAtomicLoadUMin32 : PseudoAMO;
-} // Size = 24
+  defm : PseudoAMOPat<"atomic_swap_i32", PseudoAtomicSwap32>;
+  defm : PseudoAMOPat<"atomic_load_add_i32", PseudoAtomicLoadAdd32>;
+  defm : PseudoAMOPat<"atomic_load_sub_i32", PseudoAtomicLoadSub32>;
+  defm : PseudoAMOPat<"atomic_load_and_i32", PseudoAtomicLoadAnd32>;
+  defm : PseudoAMOPat<"atomic_load_or_i32", PseudoAtomicLoadOr32>;
+  defm : PseudoAMOPat<"atomic_load_xor_i32", PseudoAtomicLoadXor32>;
+}
 
-defm : PseudoAMOPat<"atomic_swap_i32", PseudoAtomicSwap32>;
-defm : PseudoAMOPat<"atomic_load_add_i32", PseudoAtomicLoadAdd32>;
-defm : PseudoAMOPat<"atomic_load_sub_i32", PseudoAtomicLoadSub32>;
-defm : PseudoAMOPat<"atomic_load_and_i32", PseudoAtomicLoadAnd32>;
-defm : PseudoAMOPat<"atomic_load_or_i32", PseudoAtomicLoadOr32>;
-defm : PseudoAMOPat<"atomic_load_xor_i32", PseudoAtomicLoadXor32>;
-defm : PseudoAMOPat<"atomic_load_max_i32", PseudoAtomicLoadMax32>;
-defm : PseudoAMOPat<"atomic_load_min_i32", PseudoAtomicLoadMin32>;
-defm : PseudoAMOPat<"atomic_load_umax_i32", PseudoAtomicLoadUMax32>;
-defm : PseudoAMOPat<"atomic_load_umin_i32", PseudoAtomicLoadUMin32>;
-} // Predicates = [HasStdExtZalrsc, NoStdExtZaamo]
+// Normal 32-bit min/max expansion.
+let Predicates =
+    [NoBNERD, HasStdExtZalrsc, NoStdExtZaamo] in {
+  let Size = 24 in {
+    def PseudoAtomicLoadMax32 : PseudoAMO;
+    def PseudoAtomicLoadMin32 : PseudoAMO;
+    def PseudoAtomicLoadUMax32 : PseudoAMO;
+    def PseudoAtomicLoadUMin32 : PseudoAMO;
+  }
 
-let Predicates = [HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+  defm : PseudoAMOPat<"atomic_load_max_i32",
+                      PseudoAtomicLoadMax32>;
+  defm : PseudoAMOPat<"atomic_load_min_i32",
+                      PseudoAtomicLoadMin32>;
+  defm : PseudoAMOPat<"atomic_load_umax_i32",
+                      PseudoAtomicLoadUMax32>;
+  defm : PseudoAMOPat<"atomic_load_umin_i32",
+                      PseudoAtomicLoadUMin32>;
+}
 
-let Size = 16 in {
-def PseudoAtomicSwap64 : PseudoAMO;
-def PseudoAtomicLoadAdd64 : PseudoAMO;
-def PseudoAtomicLoadSub64 : PseudoAMO;
-def PseudoAtomicLoadAnd64 : PseudoAMO;
-def PseudoAtomicLoadOr64 : PseudoAMO;
-def PseudoAtomicLoadXor64 : PseudoAMO;
-} // Size = 16
-let Size = 24 in {
-def PseudoAtomicLoadMax64 : PseudoAMO;
-def PseudoAtomicLoadMin64 : PseudoAMO;
-def PseudoAtomicLoadUMax64 : PseudoAMO;
-def PseudoAtomicLoadUMin64 : PseudoAMO;
-} // Size = 24
+// BNERD 32-bit min/max expansion.
+let Predicates =
+    [HasBNERD, HasStdExtZalrsc, NoStdExtZaamo] in {
+  let Size = 32 in {
+    def BNEPseudoAtomicLoadMax32 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadMin32 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadUMax32 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadUMin32 : PseudoBNEAMOUMinUMax;
+  }
 
-defm : PseudoAMOPat<"atomic_swap_i64", PseudoAtomicSwap64, i64>;
-defm : PseudoAMOPat<"atomic_load_add_i64", PseudoAtomicLoadAdd64, i64>;
-defm : PseudoAMOPat<"atomic_load_sub_i64", PseudoAtomicLoadSub64, i64>;
-defm : PseudoAMOPat<"atomic_load_and_i64", PseudoAtomicLoadAnd64, i64>;
-defm : PseudoAMOPat<"atomic_load_or_i64", PseudoAtomicLoadOr64, i64>;
-defm : PseudoAMOPat<"atomic_load_xor_i64", PseudoAtomicLoadXor64, i64>;
-defm : PseudoAMOPat<"atomic_load_max_i64", PseudoAtomicLoadMax64, i64>;
-defm : PseudoAMOPat<"atomic_load_min_i64", PseudoAtomicLoadMin64, i64>;
-defm : PseudoAMOPat<"atomic_load_umax_i64", PseudoAtomicLoadUMax64, i64>;
-defm : PseudoAMOPat<"atomic_load_umin_i64", PseudoAtomicLoadUMin64, i64>;
-} // Predicates = [HasStdExtZalrsc, NoStdExtZaamo, IsRV64]
+  defm : PseudoAMOPat<"atomic_load_max_i32",
+                      BNEPseudoAtomicLoadMax32>;
+  defm : PseudoAMOPat<"atomic_load_min_i32",
+                      BNEPseudoAtomicLoadMin32>;
+  defm : PseudoAMOPat<"atomic_load_umax_i32",
+                      BNEPseudoAtomicLoadUMax32>;
+  defm : PseudoAMOPat<"atomic_load_umin_i32",
+                      BNEPseudoAtomicLoadUMin32>;
+}
+
+
+//===----------------------------------------------------------------------===//
+// 64-bit unmasked atomic pseudos shared by normal and BNERD modes.
+//===----------------------------------------------------------------------===//
+
+let Predicates =
+    [HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+  let Size = 16 in {
+    def PseudoAtomicSwap64 : PseudoAMO;
+    def PseudoAtomicLoadAdd64 : PseudoAMO;
+    def PseudoAtomicLoadSub64 : PseudoAMO;
+    def PseudoAtomicLoadAnd64 : PseudoAMO;
+    def PseudoAtomicLoadOr64 : PseudoAMO;
+    def PseudoAtomicLoadXor64 : PseudoAMO;
+  }
+
+  defm : PseudoAMOPat<"atomic_swap_i64",
+                      PseudoAtomicSwap64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_add_i64",
+                      PseudoAtomicLoadAdd64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_sub_i64",
+                      PseudoAtomicLoadSub64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_and_i64",
+                      PseudoAtomicLoadAnd64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_or_i64",
+                      PseudoAtomicLoadOr64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_xor_i64",
+                      PseudoAtomicLoadXor64,
+                      i64>;
+}
+
+// Normal 64-bit min/max expansion.
+let Predicates =
+    [NoBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+  let Size = 24 in {
+    def PseudoAtomicLoadMax64 : PseudoAMO;
+    def PseudoAtomicLoadMin64 : PseudoAMO;
+    def PseudoAtomicLoadUMax64 : PseudoAMO;
+    def PseudoAtomicLoadUMin64 : PseudoAMO;
+  }
+
+  defm : PseudoAMOPat<"atomic_load_max_i64",
+                      PseudoAtomicLoadMax64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_min_i64",
+                      PseudoAtomicLoadMin64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_umax_i64",
+                      PseudoAtomicLoadUMax64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_umin_i64",
+                      PseudoAtomicLoadUMin64,
+                      i64>;
+}
+
+// BNERD 64-bit min/max expansion.
+let Predicates =
+    [HasBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+  let Size = 32 in {
+    def BNEPseudoAtomicLoadMax64 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadMin64 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadUMax64 : PseudoBNEAMOUMinUMax;
+    def BNEPseudoAtomicLoadUMin64 : PseudoBNEAMOUMinUMax;
+  }
+
+  defm : PseudoAMOPat<"atomic_load_max_i64",
+                      BNEPseudoAtomicLoadMax64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_min_i64",
+                      BNEPseudoAtomicLoadMin64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_umax_i64",
+                      BNEPseudoAtomicLoadUMax64,
+                      i64>;
+  defm : PseudoAMOPat<"atomic_load_umin_i64",
+                      BNEPseudoAtomicLoadUMin64,
+                      i64>;
+}
+
+
+//===----------------------------------------------------------------------===//
+// 32-bit NAND and masked pseudos shared by normal and BNERD modes.
+//===----------------------------------------------------------------------===//
 
 let Predicates = [HasStdExtZalrsc] in {
+  let Size = 20 in {
+    def PseudoAtomicLoadNand32 : PseudoAMO;
+  }
 
-let Size = 20 in
-def PseudoAtomicLoadNand32 : PseudoAMO;
-defm : PseudoAMOPat<"atomic_load_nand_i32", PseudoAtomicLoadNand32>;
+  defm : PseudoAMOPat<"atomic_load_nand_i32",
+                      PseudoAtomicLoadNand32>;
 
-let Size = 28 in {
-  def PseudoMaskedAtomicSwap32 : PseudoMaskedAMO;
-  def PseudoMaskedAtomicLoadAdd32 : PseudoMaskedAMO;
-  def PseudoMaskedAtomicLoadSub32 : PseudoMaskedAMO;
-}
-let Size = 32 in {
-  def PseudoMaskedAtomicLoadNand32 : PseudoMaskedAMO;
-}
-let Size = 44 in {
-  def PseudoMaskedAtomicLoadMax32 : PseudoMaskedAMOMinMax;
-  def PseudoMaskedAtomicLoadMin32 : PseudoMaskedAMOMinMax;
-}
-let Size = 36 in {
- def PseudoMaskedAtomicLoadUMax32 : PseudoMaskedAMOUMinUMax;
- def PseudoMaskedAtomicLoadUMin32 : PseudoMaskedAMOUMinUMax;
+  let Size = 28 in {
+    def PseudoMaskedAtomicSwap32 : PseudoMaskedAMO;
+    def PseudoMaskedAtomicLoadAdd32 : PseudoMaskedAMO;
+    def PseudoMaskedAtomicLoadSub32 : PseudoMaskedAMO;
+  }
+
+  let Size = 32 in {
+    def PseudoMaskedAtomicLoadNand32 : PseudoMaskedAMO;
+  }
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_xchg,
+      PseudoMaskedAtomicSwap32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_add,
+      PseudoMaskedAtomicLoadAdd32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_sub,
+      PseudoMaskedAtomicLoadSub32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_nand,
+      PseudoMaskedAtomicLoadNand32>;
 }
 
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_xchg,
-                         PseudoMaskedAtomicSwap32>;
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_add,
-                         PseudoMaskedAtomicLoadAdd32>;
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_sub,
-                         PseudoMaskedAtomicLoadSub32>;
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_nand,
-                         PseudoMaskedAtomicLoadNand32>;
-def : PseudoMaskedAMOMinMaxPat<int_riscv_masked_atomicrmw_max,
-                               PseudoMaskedAtomicLoadMax32>;
-def : PseudoMaskedAMOMinMaxPat<int_riscv_masked_atomicrmw_min,
-                               PseudoMaskedAtomicLoadMin32>;
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_umax,
-                         PseudoMaskedAtomicLoadUMax32>;
-def : PseudoMaskedAMOPat<int_riscv_masked_atomicrmw_umin,
-                         PseudoMaskedAtomicLoadUMin32>;
-} // Predicates = [HasStdExtZalrsc]
+
+// Normal masked 32-bit min/max expansion.
+let Predicates = [NoBNERD, HasStdExtZalrsc] in {
+  let Size = 44 in {
+    def PseudoMaskedAtomicLoadMax32 : PseudoMaskedAMOMinMax;
+    def PseudoMaskedAtomicLoadMin32 : PseudoMaskedAMOMinMax;
+  }
+
+  let Size = 36 in {
+    def PseudoMaskedAtomicLoadUMax32 : PseudoMaskedAMOUMinUMax;
+    def PseudoMaskedAtomicLoadUMin32 : PseudoMaskedAMOUMinUMax;
+  }
+
+  def : PseudoMaskedAMOMinMaxPat<
+      int_riscv_masked_atomicrmw_max,
+      PseudoMaskedAtomicLoadMax32>;
+
+  def : PseudoMaskedAMOMinMaxPat<
+      int_riscv_masked_atomicrmw_min,
+      PseudoMaskedAtomicLoadMin32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_umax,
+      PseudoMaskedAtomicLoadUMax32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_umin,
+      PseudoMaskedAtomicLoadUMin32>;
+}
+
+
+// BNERD masked 32-bit min/max expansion.
+let Predicates = [HasBNERD, HasStdExtZalrsc] in {
+  let Size = 52 in {
+    def BNEPseudoMaskedAtomicLoadMax32 :
+        PseudoMaskedBNEAMOMinMax;
+
+    def BNEPseudoMaskedAtomicLoadMin32 :
+        PseudoMaskedBNEAMOMinMax;
+  }
+
+  let Size = 44 in {
+    def BNEPseudoMaskedAtomicLoadUMax32 :
+        PseudoMaskedBNEAMOUMinUMax;
+
+    def BNEPseudoMaskedAtomicLoadUMin32 :
+        PseudoMaskedBNEAMOUMinUMax;
+  }
+
+  def : PseudoMaskedAMOMinMaxPat<
+      int_riscv_masked_atomicrmw_max,
+      BNEPseudoMaskedAtomicLoadMax32>;
+
+  def : PseudoMaskedAMOMinMaxPat<
+      int_riscv_masked_atomicrmw_min,
+      BNEPseudoMaskedAtomicLoadMin32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_umax,
+      BNEPseudoMaskedAtomicLoadUMax32>;
+
+  def : PseudoMaskedAMOPat<
+      int_riscv_masked_atomicrmw_umin,
+      BNEPseudoMaskedAtomicLoadUMin32>;
+}
 
 let Predicates = [HasStdExtZalrsc, IsRV64] in {
 

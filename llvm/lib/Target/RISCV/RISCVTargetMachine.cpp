@@ -47,6 +47,16 @@ static cl::opt<bool> EnableRedundantCopyElimination(
     cl::desc("Enable the redundant copy elimination pass"), cl::init(true),
     cl::Hidden);
 
+static cl::opt<bool> DumpLRSCMachineCFG(
+    "riscv-dump-lrsc-mcfg",
+    cl::Hidden,
+    cl::desc("Dump machine CFG after LR/SC inline-asm expansion and counting"),
+    cl::init(false));
+static cl::opt<bool> RunBnerd(
+    "riscv-run-bnerd",
+    cl::Hidden,
+    cl::desc("Run Bnerd pass"),
+    cl::init(false));
 // FIXME: Unify control over GlobalMerge.
 static cl::opt<cl::boolOrDefault>
     EnableGlobalMerge("riscv-enable-global-merge", cl::Hidden,
@@ -129,6 +139,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVOptWInstrsPass(*PR);
   initializeRISCVFoldMemOffsetPass(*PR);
   initializeRISCVPreRAExpandPseudoPass(*PR);
+  initializeRISCVPseudoBNEBranchExpansionPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVVectorPeepholePass(*PR);
   initializeRISCVVLOptimizerPass(*PR);
@@ -565,6 +576,7 @@ void RISCVPassConfig::addPreEmitPass() {
   // basic block alignment. It must be done before Branch Relaxation to
   // prevent the adjusted offset exceeding the branch range.
   addPass(createRISCVIndirectBranchTrackingPass());
+  
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }
@@ -591,10 +603,19 @@ void RISCVPassConfig::addPreEmitPass2() {
   if (EnableCFIInstrInserter)
     addPass(createCFIInstrInserter());
 
-  // add pass to count LR/SC instruction pairs...
-  addPass(createRISCVInsertBNERDSCPass());
+
   addPass(createRISCVExpandINLINEASMPass());
+    // add pass to count LR/SC instruction pairs...
+  // Expand PseudoBNE branches to a canonical form .
+  addPass(createRISCVPseudoBNEBranchExpansionPass());
   addPass(createRISCVCountLRSCPass());
+  if (DumpLRSCMachineCFG) {
+    addPass(&MachineCFGPrinterID);
+  }
+  if (RunBnerd) {
+    addPass(createRISCVInsertBNERDSCPass());
+  }
+
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
@@ -610,6 +631,7 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 
 void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVPreRAExpandPseudoPass());
+
   if (TM->getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());
     addPass(createRISCVVLOptimizerPass());
@@ -637,6 +659,7 @@ void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOptLevel::None &&
       EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
+    
 }
 
 bool RISCVPassConfig::addILPOpts() {

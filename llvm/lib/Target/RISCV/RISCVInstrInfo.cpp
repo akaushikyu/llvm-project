@@ -35,6 +35,7 @@
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Signals.h"
 
 using namespace llvm;
 
@@ -1118,15 +1119,23 @@ static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
 #ifdef BNERD_FEATURE_DISABLED
 #else
 
-  if (LastInst.getOpcode() == RISCV::BNERD || LastInst.getOpcode() == RISCV::BEQRD) {
+  if (LastInst.getOpcode() == RISCV::PseudoBEQUsingBNE 
+      || LastInst.getOpcode() == RISCV::PseudoBLTUsingBNE
+      || LastInst.getOpcode() == RISCV::PseudoBGEUsingBNE
+      || LastInst.getOpcode() == RISCV::PseudoBLTUUsingBNE
+      || LastInst.getOpcode() == RISCV::PseudoBGEUUsingBNE
+      || LastInst.getOpcode() == RISCV::BNERD || LastInst.getOpcode() == RISCV::BEQRD) {
+
     Target = LastInst.getOperand(3).getMBB();
     Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
-    Cond.push_back(LastInst.getOperand(0));  // rs1
-    Cond.push_back(LastInst.getOperand(1));  // rs2
+    Cond.push_back(LastInst.getOperand(0));  // rd
+    Cond.push_back(LastInst.getOperand(1));  // rs1
+    Cond.push_back(LastInst.getOperand(2));  // rs2
     // operand 2 (rd) is not part of the condition and it's the embedded reg
     return;
   }
 #endif
+
   Target = LastInst.getOperand(2).getMBB();
   Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
   Cond.push_back(LastInst.getOperand(0));
@@ -1407,11 +1416,18 @@ unsigned RISCVInstrInfo::insertBranch(
     ArrayRef<MachineOperand> Cond, const DebugLoc &DL, int *BytesAdded) const {
   if (BytesAdded)
     *BytesAdded = 0;
-
   // Shouldn't be a fall through.
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
-  assert((Cond.size() == 3 || Cond.size() == 0) &&
-         "RISC-V branch conditions have two components!");
+  if (!Cond.empty()) {
+    if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE  ||
+        Cond[0].getImm() == RISCV::PseudoBLTUsingBNE  ||
+        Cond[0].getImm() == RISCV::PseudoBGEUsingBNE  ||
+        Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE ||
+        Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+      assert(Cond.size() == 4 && "RISC-V custom branch conditions have three components!");
+    else
+      assert(Cond.size() == 3 && "RISC-V branch conditions have two components!");
+  }
 
   // Unconditional branch.
   if (Cond.empty()) {
@@ -1420,7 +1436,27 @@ unsigned RISCVInstrInfo::insertBranch(
       *BytesAdded += getInstSizeInBytes(MI);
     return 1;
   }
+  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE) {
+    errs() << ">>> REINSERTING PSEUDO-BRANCH: " << getName(Cond[0].getImm()) << " function: " << MBB.getParent()->getName() << "\n";
 
+    MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm())).add(Cond[1]).add(Cond[2]).add(Cond[3]).addMBB(TBB);
+
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(CondMI);
+
+    if (!FBB)
+      return 1;
+
+    MachineInstr &UncondMI = *BuildMI(&MBB, DL, get(RISCV::PseudoBR)).addMBB(FBB);
+
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(UncondMI);
+
+    return 2;
+  }
   // Either a one or two-way conditional branch.
   MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm()))
                               .add(Cond[1])
@@ -1513,7 +1549,14 @@ void RISCVInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
 
 bool RISCVInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  assert((Cond.size() == 3) && "Invalid branch condition!");
+  errs() << "\n Cond size: " << Cond.size() << "\n";
+  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+    assert(Cond.size() == 4 && "Invalid branch condition!");
+  else
+    assert(Cond.size() == 3 && "Invalid branch condition!");
   switch (Cond[0].getImm()) {
   default:
     llvm_unreachable("Unknown conditional branch!");
@@ -1533,6 +1576,11 @@ bool RISCVInstrInfo::reverseBranchCondition(
     Cond[0].setImm(RISCV::BEQI);
     break;
 #else
+  case RISCV::PseudoBEQUsingBNE:
+  case RISCV::PseudoBLTUsingBNE:
+  case RISCV::PseudoBGEUsingBNE:
+  case RISCV::PseudoBLTUUsingBNE:
+  case RISCV::PseudoBGEUUsingBNE:
   case RISCV::BEQRD:
   case RISCV::BNERD:
     // BNERD and BEQRD have no inverse form
@@ -1788,6 +1836,12 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   case RISCV::BEQRD:
   case RISCV::BNERD:
     return isInt<8>(BrOffset);
+  case RISCV::PseudoBEQUsingBNE:
+  case RISCV::PseudoBLTUsingBNE:
+  case RISCV::PseudoBGEUsingBNE:
+  case RISCV::PseudoBLTUUsingBNE:
+  case RISCV::PseudoBGEUUsingBNE:
+    return isInt<13>(BrOffset);
 #endif
   case RISCV::BEQ:
   case RISCV::BNE:
@@ -3706,12 +3760,24 @@ RISCVInstrInfo::getOutliningCandidateInfo(
     std::vector<outliner::Candidate> &RepeatedSequenceLocs,
     unsigned MinRepeats) const {
 
-  // Analyze each candidate and erase the ones that are not viable.
-  llvm::erase_if(RepeatedSequenceLocs, analyzeCandidate);
+// Analyze each candidate and erase the ones that are not viable.
+llvm::erase_if(RepeatedSequenceLocs, analyzeCandidate);
 
-  // If the sequence doesn't have enough candidates left, then we're done.
-  if (RepeatedSequenceLocs.size() < MinRepeats)
-    return std::nullopt;
+// PseudoCALLReg is a barrier, so it cannot replace the end of a block
+// that still requires implicit fallthrough.
+// Reject candidates whose outlined call would replace required fallthrough.
+for (auto It = RepeatedSequenceLocs.begin(); It != RepeatedSequenceLocs.end();) {
+  MachineBasicBlock *MBB = It->getMBB();
+
+  if (It->end() == MBB->end() && MBB->getFallThrough())
+    It = RepeatedSequenceLocs.erase(It);
+  else
+    ++It;
+}
+
+// If the sequence doesn't have enough candidates left, then we're done.
+if (RepeatedSequenceLocs.size() < MinRepeats)
+  return std::nullopt;
 
   // Each RepeatedSequenceLoc is identical.
   outliner::Candidate &Candidate = RepeatedSequenceLocs[0];
