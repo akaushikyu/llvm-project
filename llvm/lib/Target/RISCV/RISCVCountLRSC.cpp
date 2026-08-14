@@ -187,6 +187,8 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 
 
 std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
+
+std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
@@ -220,12 +222,12 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
         MachineBasicBlock::iterator LRMBBI = MBBI;
         while(std::next(LRMBBI) != E){
           
-          if(std::next(LRMBBI)->isBranch() && !MPDT.dominates(SCMBB,&MBB)) {
+          if(std::next(LRMBBI)->isBranch()) {
             Counts.updateBBLoopSeqFlavCnt(MBB, true);
             LoopSeqConditionalCountBB++;
             break;
           }
-          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode()) || MPDT.dominates(SCMBB,&MBB) ) {
+          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode())) {
             Counts.updateBBLoopSeqFlavCnt(MBB, false);
             LoopSeqUnconditionalCountBB++;
             break;
