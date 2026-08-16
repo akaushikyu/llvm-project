@@ -290,11 +290,12 @@ class PseudoMaskedAMOUMinUMax
 }
 
 class PseudoMaskedBNEAMOMinMax
-    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2),
+    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
              (ins GPR:$addr, GPR:$incr, GPR:$mask, GPR:$sextshamt, 
                   ordering:$ordering), []> {
   let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
-                    "@earlyclobber $scratch2";
+                    "@earlyclobber $scratch2,"
+                    "@earlyclobber $scratch3";
   let mayLoad = 1;
   let mayStore = 1;
   let hasSideEffects = 0;

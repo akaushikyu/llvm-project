@@ -197,10 +197,13 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
       case RISCV::SC_D_AQRL:
       case RISCV::SC_W_AQRL:
         return E;
+      default:
+        break;
+        
     }
     MBBI++;
   }
-
+  return E;
 }
 // ===========================================================================
 // Pass entry point
@@ -245,6 +248,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       // found LR
       ++NumLRs;
       if(MBBI == E){
+        seenLRMBBs.insert(&MBB);
         continue;
       }
       MachineBasicBlock::iterator BrI= isBranchAfter(*MBBI);
