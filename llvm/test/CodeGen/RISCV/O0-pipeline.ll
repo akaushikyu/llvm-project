@@ -78,6 +78,9 @@
 ; CHECK-NEXT:       RISC-V pseudo instruction expansion pass
 ; CHECK-NEXT:       RISC-V atomic pseudo instruction expansion pass
 ; CHECK-NEXT:       Unpack machine instruction bundles
+; CHECK-NEXT: RISC-V Expand Inline Assembly
+; CHECK-NEXT: RISC-V PseudoBNE branch Expansion
+; CHECK-NEXT: RISC-V count LR/SC instruction pairs
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       RISC-V Assembly Printer

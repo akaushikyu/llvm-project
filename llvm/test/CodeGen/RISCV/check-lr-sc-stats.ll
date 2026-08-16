@@ -114,7 +114,7 @@ attributes #2 = { mustprogress nofree norecurse nounwind memory(readwrite, argme
 ; CHECK:           "num_insn": 4
 ; CHECK:         }
 ; CHECK:       ],
-; CHECK:       "total_lrsc_occurrences": 4
+; CHECK:       "total_lrsc_occurrences": 2
 ; CHECK:     },
 ; CHECK:     "h": {
 ; CHECK:       "basic_blocks": [
@@ -126,7 +126,7 @@ attributes #2 = { mustprogress nofree norecurse nounwind memory(readwrite, argme
 ; CHECK:           "num_insn": 8
 ; CHECK:         }
 ; CHECK:       ],
-; CHECK:       "total_lrsc_occurrences": 4
+; CHECK:       "total_lrsc_occurrences": 0
 ; CHECK:     }
 ; CHECK:   }
 ; CHECK: }

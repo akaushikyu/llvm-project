@@ -1153,6 +1153,11 @@ bool MachineOutliner::outline(
                  Last = std::next(CallInst.getReverse());
              Iter != Last; Iter++) {
           MachineInstr *MI = &*Iter;
+          // [ALI] Trying to fix bad machine code error : Debug instructions must not contribute register uses to outlined calls.
+          if (MI->isDebugInstr()){
+            continue;
+          }
+
           SmallSet<Register, 2> InstrUseRegs;
           for (MachineOperand &MOP : MI->operands()) {
             // Skip over anything that isn't a register.
@@ -1170,6 +1175,7 @@ bool MachineOutliner::outline(
             } else if (!MOP.isUndef()) {
               // Any register which is not undefined should
               // be put in the use register set.
+              LLVM_DEBUG(dbgs() << "OUTLINER " << MF->getName() << " USE " << MOP << " FROM MI: " << *MI);
               UseRegs.insert(MOP.getReg());
               InstrUseRegs.insert(MOP.getReg());
             }

@@ -1753,6 +1753,16 @@ def : Pat<(i64 (setlt (sext_inreg GPR:$rs1, i32), 0)), (SRLIW GPR:$rs1, 31)>;
 
 /// Branches and jumps
 
+//[BNERD]
+multiclass BNEBccPat<CondCode Cond, Pseudo PseudoInst> {
+  def : Pat<(riscv_brcc(XLenVT GPR:$rs1), GPR:$rs2, Cond, bb:$target), 
+            (PseudoInst GPR:$rs1, GPR:$rs2, bare_simm13_lsb0_bb:$target)>;
+
+  // Explicitly select constant zero as X0.
+  def : Pat<(riscv_brcc(XLenVT GPR:$rs1),0, Cond, bb:$target),
+            (PseudoInst GPR:$rs1, (XLenVT X0), bare_simm13_lsb0_bb:$target)>;
+}
+
 // Match `riscv_brcc` and lower to the appropriate RISC-V branch instruction.
 multiclass BccPat<CondCode Cond, RVInstB Inst> {
   def : Pat<(riscv_brcc (XLenVT GPR:$rs1), GPR:$rs2, Cond, bb:$imm12),
@@ -1762,22 +1772,61 @@ multiclass BccPat<CondCode Cond, RVInstB Inst> {
             (Inst GPR:$rs1, (XLenVT X0), bare_simm13_lsb0_bb:$imm12)>;
 }
 
+//[BNERD]
+class BNEBranchPseudo
+    : Pseudo<(outs GPR:$scratch1),
+             (ins GPR:$rs1, GPR:$rs2, bare_simm13_lsb0_bb:$target),[]> {
+  let Constraints = "@earlyclobber $scratch1";
+  let isBranch = 1;
+  let isTerminator = 1;
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+  let hasNoSchedulingInfo = 1;
+}
+// Pseudo opcodes
+def PseudoBEQUsingBNE  : BNEBranchPseudo;
+def PseudoBLTUsingBNE  : BNEBranchPseudo;
+def PseudoBGEUsingBNE  : BNEBranchPseudo;
+def PseudoBLTUUsingBNE : BNEBranchPseudo;
+def PseudoBGEUUsingBNE : BNEBranchPseudo;
+
 class BrccCompressOpt<CondCode Cond, RVInstB Inst>
     : Pat<(riscv_brcc GPR:$lhs, simm12_no6:$Constant, Cond, bb:$place),
           (Inst (XLenVT (ADDI GPR:$lhs, (NegImm simm12_lo:$Constant))),
                 (XLenVT X0), bb:$place)>;
 
-defm : BccPat<SETEQ, BEQ>;
+//[BNERD]
+// BNE always uses the normal branch pattern.
 defm : BccPat<SETNE, BNE>;
-defm : BccPat<SETLT, BLT>;
-defm : BccPat<SETGE, BGE>;
-defm : BccPat<SETULT, BLTU>;
-defm : BccPat<SETUGE, BGEU>;
+
+// Normal branches are usable only when the BNERD feature is OFF.
+let Predicates = [NoBNERD] in {
+  defm : BccPat<SETEQ,  BEQ>;
+  defm : BccPat<SETLT,  BLT>;
+  defm : BccPat<SETGE,  BGE>;
+  defm : BccPat<SETULT, BLTU>;
+  defm : BccPat<SETUGE, BGEU>;
+}
+
+// The pseudo patterns are usable only when the BNERD feature is ON.
+let Predicates = [HasBNERD] in {
+  defm : BNEBccPat<SETEQ,  PseudoBEQUsingBNE>;
+  defm : BNEBccPat<SETLT,  PseudoBLTUsingBNE>;
+  defm : BNEBccPat<SETGE,  PseudoBGEUsingBNE>;
+  defm : BNEBccPat<SETULT, PseudoBLTUUsingBNE>;
+  defm : BNEBccPat<SETUGE, PseudoBGEUUsingBNE>;
+}
+
+let Predicates =[HasStdExtZca, OptForMinSize, NoBNERD] in {
+  def : BrccCompressOpt<SETEQ, BEQ>;
+}
+
 
 let Predicates = [HasStdExtZca, OptForMinSize] in {
-  def : BrccCompressOpt<SETEQ, BEQ>;
   def : BrccCompressOpt<SETNE, BNE>;
 }
+
 
 class LongBccPseudo : Pseudo<(outs),
                              (ins GPR:$rs1, GPR:$rs2, simm21_lsb0_jal:$imm20),

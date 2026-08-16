@@ -1736,6 +1736,15 @@ def HasVendorXSMTVDot
 // LLVM specific features and extensions
 //===----------------------------------------------------------------------===//
 
+//BNERD
+// BNERD (Branch with destination register)
+def FeatureBNERD
+    : SubtargetFeature<"bnerd", "HasBNERD", "true", "BNERD (Branch with destination register)">;
+def HasBNERD
+    : Predicate<"Subtarget->hasBNERD()">;
+def NoBNERD
+    : Predicate<"!Subtarget->hasBNERD()">;
+
 // Feature32Bit exists to mark CPUs that support RV32 to distinguish them from
 // tuning CPU names.
 def Feature32Bit

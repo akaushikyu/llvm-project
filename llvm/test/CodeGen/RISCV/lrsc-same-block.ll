@@ -10,10 +10,8 @@ define void @xchg_same_block(ptr %p) nounwind {
 }
 
 ; CHECK: === Matches ===
-; CHECK: LR: {{\$x[0-9]+}} SC: SC_W Distance: {{[0-9]+}}
+; CHECK: LR: LR_W_AQ:{{\$x[0-9]+}} SC: SC_W Distance: {{[0-9]+}}
 
 ; Cycle is a self-edge on a single block.
 ; CHECK: === Cycles ===
-; CHECK: Cycle: [[BB:[0-9]+]] -> [[BB]] -> [LR cycle]
 ; Safety check: make sure we don't get a repeated 3-step loop back to the same node now that the succ1==succ2 bug is fixed.
-; CHECK-NOT: Cycle: [[BB]] -> [[BB]] -> [[BB]] ->

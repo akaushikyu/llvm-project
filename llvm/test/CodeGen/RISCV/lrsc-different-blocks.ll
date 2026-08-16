@@ -10,8 +10,8 @@ define void @cmpxchg_different_blocks(ptr %p) nounwind {
 }
 
 ; CHECK: === Matches ===
-; CHECK: LR: {{\$x[0-9]+}} SC: SC_W Distance: {{[0-9]+}}
+; CHECK: LR: LR_W_AQ:{{\$x[0-9]+}} SC: SC_W Distance: {{[0-9]+}}
 
 ; Cycle spans two distinct blocks: LR block -> SC block -> LR block.
 ; CHECK: === Cycles ===
-; CHECK: Cycle: [[LR:[0-9]+]] -> [[SC:[0-9]+]] -> [[LR]] -> [LR cycle]
+; CHECK: Cycle: [[LR:[0-9]+]] -> [[SC:[0-9]+]] -> [[LR]] -> [LRSC]
