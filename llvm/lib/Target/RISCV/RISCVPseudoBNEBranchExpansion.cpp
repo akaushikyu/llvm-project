@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
+#include "RISCVSubtarget.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Instructions.h"
@@ -19,7 +20,7 @@
 
 #define DEBUG_TYPE "riscv-pseudo-bne-branch-expansion"
 
-#include "RISCVRegisterInfo.cpp"
+#include "RISCVRegisterInfo.h"
 #include "LRSCCountUtils.hpp"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -110,92 +111,94 @@ bool RISCVPseudoBNEBranchExpansion::runOnMachineFunction(
     while (MBBI != E) {
       unsigned Opc = MBBI->getOpcode();
       auto NewMBBI = MBBI++;
+
       LLVM_DEBUG(
           dbgs() << "[PSEUDOBNEExpansion] current instruction"
-                 << " MBB=" << &MBB
-                 << " MBB#=" << MBB.getNumber()
-                 << " MI=" << &*MBBI
-                 << " opcode=" << TII->getName(Opc)
-                 << "\n";
+                << " MBB=" << &MBB
+                << " MBB#=" << MBB.getNumber()
+                << " MI=" << &*NewMBBI
+                << " opcode=" << TII->getName(Opc)
+                << "\n";
           dbgs() << "[PSEUDOBNEExpansion] MI: ";
-          MBBI->print(dbgs());
+          NewMBBI->print(dbgs());
       );
-      if(isLR(Opc)) {
+
+      if (isLR(Opc)) {
         isAfterLR = true;
-      
+
         auto ScanI = std::next(NewMBBI);
+        bool FoundBranch = false;
 
         while (ScanI != E) {
           unsigned ScanOpc = ScanI->getOpcode();
 
           LLVM_DEBUG(
               dbgs() << "[PSEUDOBNEExpansion] scanning for branch"
-                     << " MBB=" << &MBB
-                     << " MBB#=" << MBB.getNumber()
-                     << " ScanMI=" << &*ScanI
-                     << " opcode=" << TII->getName(ScanOpc)
-                     << "\n";
+                    << " MBB=" << &MBB
+                    << " MBB#=" << MBB.getNumber()
+                    << " ScanMI=" << &*ScanI
+                    << " opcode=" << TII->getName(ScanOpc)
+                    << "\n";
               dbgs() << "[PSEUDOBNEExpansion] scanned MI: ";
               ScanI->print(dbgs());
           );
 
           if (isPseudoBranchOpc(ScanOpc)) {
+            FoundBranch = true;
+
             LLVM_DEBUG(
                 dbgs() << "[PSEUDOBNEExpansion] found candidate branch"
-                       << " LR_MBB=" << &MBB
-                       << " MBB#=" << MBB.getNumber()
-                       << " Branch=" << &*ScanI
-                       << " opcode=" << TII->getName(ScanOpc)
-                       << "\n");
+                      << " LR_MBB=" << &MBB
+                      << " MBB#=" << MBB.getNumber()
+                      << " Branch=" << &*ScanI
+                      << " opcode=" << TII->getName(ScanOpc)
+                      << "\n");
 
             bool BranchChanged = branchToBNE(MBB, ScanI, isAfterLR);
             Changed |= BranchChanged;
 
             LLVM_DEBUG(
                 dbgs() << "[PSEUDOBNEExpansion] branchToBNE returned"
-                       << " MBB=" << &MBB
-                       << " MBB#=" << MBB.getNumber()
-                       << " changed=" << BranchChanged
-                       << " totalChanged=" << Changed
-                       << "\n");
+                      << " MBB=" << &MBB
+                      << " MBB#=" << MBB.getNumber()
+                      << " changed=" << BranchChanged
+                      << " totalChanged=" << Changed
+                      << "\n");
 
             break;
           }
 
           ++ScanI;
         }
-      
 
         LLVM_DEBUG(
-            if (ScanI == E) {
+            if (!FoundBranch && ScanI == E) {
               dbgs() << "[PSEUDOBNEExpansion] reached end of MBB after LR"
-                     << " MBB=" << &MBB
-                     << " MBB#=" << MBB.getNumber()
-                     << "\n";
+                    << " MBB=" << &MBB
+                    << " MBB#=" << MBB.getNumber()
+                    << "\n";
             }
         );
-      }
-      else{
+      } else {
         LLVM_DEBUG(
             dbgs() << "[PSEUDOBNEExpansion] found candidate branch -> original instruction"
-                    << " NON_LR_MBB=" << &MBB
-                    << " MBB#=" << MBB.getNumber()
-                    << " Branch=" << &*NewMBBI
-                    << " opcode=" << TII->getName(NewMBBI->getOpcode())
-                    << "\n");
+                  << " NON_LR_MBB=" << &MBB
+                  << " MBB#=" << MBB.getNumber()
+                  << " Branch=" << &*NewMBBI
+                  << " opcode=" << TII->getName(NewMBBI->getOpcode())
+                  << "\n");
 
         bool BranchChanged = branchToBNE(MBB, NewMBBI, isAfterLR);
         Changed |= BranchChanged;
 
         LLVM_DEBUG(
             dbgs() << "[PSEUDOBNEExpansion] branchToBNE returned"
-                    << " MBB=" << &MBB
-                    << " MBB#=" << MBB.getNumber()
-                    << " changed=" << BranchChanged
-                    << " totalChanged=" << Changed
-                    << "\n");
+                  << " MBB=" << &MBB
+                  << " MBB#=" << MBB.getNumber()
+                  << " changed=" << BranchChanged
+                  << " totalChanged=" << Changed
+                  << "\n");
       }
-      
     }
 
     LLVM_DEBUG(
@@ -211,8 +214,6 @@ bool RISCVPseudoBNEBranchExpansion::runOnMachineFunction(
              << " function=" << MF.getName()
              << " changed=" << Changed
              << "\n");
-  errs() << "FINISHED PSEUDO EXPANSION: " << MF.getName() << "\n";
-  MF.print(errs());
   return Changed;
 
 }
@@ -339,7 +340,7 @@ bool RISCVPseudoBNEBranchExpansion::branchToBNE(
         );
 
         Br.eraseFromParent();
-        MBB.print(errs());
+        
 
         LLVM_DEBUG(
             dbgs() << "[branchToBNE][BEQ] replacement complete"
@@ -390,7 +391,7 @@ bool RISCVPseudoBNEBranchExpansion::branchToBNE(
         );
 
         Br.eraseFromParent();
-        MBB.print(errs());
+        
         return true;
       }
 
@@ -434,7 +435,7 @@ bool RISCVPseudoBNEBranchExpansion::branchToBNE(
         );
 
         Br.eraseFromParent();
-        MBB.print(errs());
+        
         return true;
       }
 
@@ -492,7 +493,7 @@ bool RISCVPseudoBNEBranchExpansion::branchToBNE(
         );
 
         Br.eraseFromParent();
-        MBB.print(errs());
+        
         LLVM_DEBUG(
           dbgs() << "[branchToBNE][BGE] MBB after erasing old branch:\n";
           MBB.print(dbgs());
@@ -554,7 +555,7 @@ bool RISCVPseudoBNEBranchExpansion::branchToBNE(
         );
 
         Br.eraseFromParent();
-        MBB.print(errs());
+        
         return true;
       }
 

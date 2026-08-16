@@ -738,22 +738,21 @@ static void doMaskedAtomicMinMaxOpExpansion(
   Register AddrReg = Register();
   Register IncrReg = Register();
   Register MaskReg = Register();
+  bool IsSigned = BinOp == AtomicRMWInst::Min || BinOp == AtomicRMWInst::Max;
   AtomicOrdering Ordering = AtomicOrdering::NotAtomic;
   if(isBNE){
     Scratch3Reg = MI.getOperand(3).getReg();
     AddrReg = MI.getOperand(4).getReg();
     IncrReg = MI.getOperand(5).getReg();
     MaskReg = MI.getOperand(6).getReg();
-    Ordering =
-        static_cast<AtomicOrdering>(MI.getOperand(7).getImm());
+    Ordering = static_cast<AtomicOrdering>(MI.getOperand(IsSigned ? 8 : 7).getImm());
   } else {
     AddrReg = MI.getOperand(3).getReg();
     IncrReg = MI.getOperand(4).getReg();
     MaskReg = MI.getOperand(5).getReg();
-    Ordering =
-        static_cast<AtomicOrdering>(MI.getOperand(6).getImm());
+    Ordering = static_cast<AtomicOrdering>(MI.getOperand(IsSigned ? 7 : 6).getImm());
   }
-  bool IsSigned = BinOp == AtomicRMWInst::Min || BinOp == AtomicRMWInst::Max;
+  
 
 
   //
