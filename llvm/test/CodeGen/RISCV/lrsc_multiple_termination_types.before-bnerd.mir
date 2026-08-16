@@ -316,7 +316,6 @@
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.1 \(%ir-block\.20\):$}}
 # MIR-NEXT: {{^    successors: %bb\.16\(0x80000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    renamable \$x10 = LW \$x8, -60 :: \(dereferenceable load \(s32\) from %ir\.15\)$}}
 # MIR-NEXT: {{^    renamable \$x11 = LUI target-flags\(riscv-hi\) @sink$}}
@@ -329,22 +328,22 @@
 # MIR-NEXT: {{^    PseudoBR %bb\.16$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.16 \(%ir-block\.20\):$}}
-# MIR-NEXT: {{^    successors: %bb\.17\(0x40000000\), %bb\.18\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    successors: %bb\.18\(0x40000000\), %bb\.17\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}
 # MIR-NEXT: {{^    BNE \$x13, \$x12, %bb\.18$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.17 \(%ir-block\.20\):$}}
 # MIR-NEXT: {{^    successors: %bb\.16\(0x40000000\), %bb\.18\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x14 = SC_W \$x11, \$x10$}}
 # MIR-NEXT: {{^    BNE \$x14, \$x0, %bb\.16$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.18 \(%ir-block\.20\):$}}
 # MIR-NEXT: {{^    successors: %bb\.2\(0x40000000\), %bb\.7\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    SW killed renamable \$x13, \$x8, -64 :: \(store \(s32\) into %ir\.16\)$}}
 # MIR-NEXT: {{^    SW killed renamable \$x14, \$x8, -68 :: \(store \(s32\) into %ir\.17\)$}}
@@ -418,7 +417,6 @@
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.10 \(%ir-block\.53\):$}}
 # MIR-NEXT: {{^    successors: %bb\.19\(0x80000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    SW \$x0, \$x8, -72 :: \(store \(s32\) into %ir\.18\)$}}
 # MIR-NEXT: {{^    renamable \$x10 = ADDI \$x0, 1$}}
@@ -433,22 +431,22 @@
 # MIR-NEXT: {{^    PseudoBR %bb\.19$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.19 \(%ir-block\.53\):$}}
-# MIR-NEXT: {{^    successors: %bb\.20\(0x40000000\), %bb\.21\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    successors: %bb\.21\(0x40000000\), %bb\.20\(0x40000000\)$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}
 # MIR-NEXT: {{^    BNE \$x13, \$x12, %bb\.21$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.20 \(%ir-block\.53\):$}}
 # MIR-NEXT: {{^    successors: %bb\.19\(0x40000000\), %bb\.21\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x14 = SC_W \$x11, \$x10$}}
 # MIR-NEXT: {{^    BNE \$x14, \$x0, %bb\.19$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.21 \(%ir-block\.53\):$}}
 # MIR-NEXT: {{^    successors: %bb\.11\(0x40000000\), %bb\.12\(0x40000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x13, \$x10, \$x12, \$x14, \$x11, \$x0, \$x8$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x13, \$x12, \$x11, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    SW killed renamable \$x13, \$x8, -72 :: \(store \(s32\) into %ir\.18\)$}}
 # MIR-NEXT: {{^    SW killed renamable \$x14, \$x8, -76 :: \(store \(s32\) into %ir\.19\)$}}
@@ -857,14 +855,14 @@
 # JSON-NEXT: {{^              "hasLoop": false,$}}
 # JSON-NEXT: {{^              "loops": \[$}}
 # JSON-NEXT: {{^                \{$}}
-# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
-# JSON-NEXT: {{^                  "num_instr": 6,$}}
-# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
-# JSON-NEXT: {{^                \},$}}
-# JSON-NEXT: {{^                \{$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LR",$}}
 # JSON-NEXT: {{^                  "num_instr": 24,$}}
 # JSON-NEXT: {{^                  "path": "1 -> 16 -> 18 -> 2 -> 3 -> 1"$}}
+# JSON-NEXT: {{^                \},$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
 # JSON-NEXT: {{^                \}$}}
 # JSON-NEXT: {{^              \],$}}
 # JSON-NEXT: {{^              "numberOfLoops": 0$}}
@@ -875,14 +873,14 @@
 # JSON-NEXT: {{^              "hasLoop": false,$}}
 # JSON-NEXT: {{^              "loops": \[$}}
 # JSON-NEXT: {{^                \{$}}
-# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
-# JSON-NEXT: {{^                  "num_instr": 6,$}}
-# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
-# JSON-NEXT: {{^                \},$}}
-# JSON-NEXT: {{^                \{$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LR",$}}
 # JSON-NEXT: {{^                  "num_instr": 24,$}}
 # JSON-NEXT: {{^                  "path": "1 -> 16 -> 18 -> 2 -> 3 -> 1"$}}
+# JSON-NEXT: {{^                \},$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
 # JSON-NEXT: {{^                \}$}}
 # JSON-NEXT: {{^              \],$}}
 # JSON-NEXT: {{^              "numberOfLoops": 0$}}
@@ -893,14 +891,14 @@
 # JSON-NEXT: {{^              "hasLoop": false,$}}
 # JSON-NEXT: {{^              "loops": \[$}}
 # JSON-NEXT: {{^                \{$}}
-# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
-# JSON-NEXT: {{^                  "num_instr": 6,$}}
-# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
-# JSON-NEXT: {{^                \},$}}
-# JSON-NEXT: {{^                \{$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LR",$}}
 # JSON-NEXT: {{^                  "num_instr": 24,$}}
 # JSON-NEXT: {{^                  "path": "1 -> 16 -> 18 -> 2 -> 3 -> 1"$}}
+# JSON-NEXT: {{^                \},$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
 # JSON-NEXT: {{^                \}$}}
 # JSON-NEXT: {{^              \],$}}
 # JSON-NEXT: {{^              "numberOfLoops": 0$}}
@@ -911,14 +909,14 @@
 # JSON-NEXT: {{^              "hasLoop": false,$}}
 # JSON-NEXT: {{^              "loops": \[$}}
 # JSON-NEXT: {{^                \{$}}
-# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
-# JSON-NEXT: {{^                  "num_instr": 6,$}}
-# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
-# JSON-NEXT: {{^                \},$}}
-# JSON-NEXT: {{^                \{$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LR",$}}
 # JSON-NEXT: {{^                  "num_instr": 24,$}}
 # JSON-NEXT: {{^                  "path": "1 -> 16 -> 18 -> 2 -> 3 -> 1"$}}
+# JSON-NEXT: {{^                \},$}}
+# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
+# JSON-NEXT: {{^                  "num_instr": 6,$}}
+# JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
 # JSON-NEXT: {{^                \}$}}
 # JSON-NEXT: {{^              \],$}}
 # JSON-NEXT: {{^              "numberOfLoops": 0$}}

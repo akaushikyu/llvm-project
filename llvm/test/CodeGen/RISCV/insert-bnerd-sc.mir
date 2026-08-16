@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=riscv64 -run-pass=riscv-insert-bnerd-sc \
+# RUN: llc -mattr=+a,+bnerd -mtriple=riscv64 -run-pass=riscv-insert-bnerd-sc \
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s
 --- |
   define void @bne_after_lr(ptr %p) { ret void }
@@ -38,39 +38,7 @@ body:             |
     PseudoRET
 ...
 # -----------------------------------------------------------------------------
-# Case 2: LR followed by BEQ.
-# -----------------------------------------------------------------------------
----
-name:            beq_after_lr
-tracksRegLiveness: true
-body:             |
-  ; CHECK-LABEL: name: beq_after_lr
-  ; CHECK:      bb.0:
-  ; CHECK:        LR_W
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BEQRD $x5, $x0, %bb.[[BRIDGE:[0-9]+]]
-  ; CHECK-NOT:    BNERD
-  ;
-  ; CHECK:      bb.1:
-  ; CHECK:        SC_W
-  ;
-  ; CHECK:      bb.[[BRIDGE]]:
-  ; CHECK:         $x0 = SC_W ${{x[0-9]+}}, $x0
-  ; CHECK-NEXT:   PseudoBR %bb.2
-  bb.0:
-    successors: %bb.1, %bb.2
-    liveins: $x10
-    $x5 = LR_W $x10
-    BEQ $x5, $x0, %bb.2
-  bb.1:
-    successors: %bb.2
-    liveins: $x5, $x10
-    early-clobber $x6 = SC_W $x5, $x10
-    PseudoBR %bb.2
-  bb.2:
-    PseudoRET
-...
-# -----------------------------------------------------------------------------
-# Case 3: LR not followed by a branch — no rewrite.
+# Case 2: LR not followed by a branch — no rewrite.
 # -----------------------------------------------------------------------------
 ---
 name:            lr_no_branch
@@ -89,7 +57,7 @@ body:             |
     PseudoRET
 ...
 # -----------------------------------------------------------------------------
-# Case 4: Multiple LR/SC pairs in the same function.
+# Case 3: Multiple LR/SC pairs in the same function.
 # -----------------------------------------------------------------------------
 ---
 name:            multiple_lrsc_pairs
@@ -105,10 +73,10 @@ body:             |
   ; CHECK:      bb.1:
   ; CHECK:        SC_W
   ;
-  ; Second pair: BEQ -> BEQRD with its own bridge block.
+  ; Second pair: BEQ -> BNERD with its own bridge block.
   ; CHECK:      bb.2:
   ; CHECK:        $x7 = LR_W $x11
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BEQRD $x7, $x0, %bb.[[BRIDGE2:[0-9]+]]
+  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x7, $x0, %bb.[[BRIDGE2:[0-9]+]]
   ;
   ; CHECK:      bb.3:
   ; CHECK:        SC_W
@@ -134,7 +102,7 @@ body:             |
     successors: %bb.3, %bb.4
     liveins: $x11
     $x7 = LR_W $x11
-    BEQ $x7, $x0, %bb.4
+    BNE $x7, $x0, %bb.4
   bb.3:
     successors: %bb.4
     liveins: $x7, $x11

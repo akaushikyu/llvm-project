@@ -27,7 +27,7 @@
 ; CHECK-NEXT:     FunctionPass Manager
 ; CHECK-NEXT:       Expand IR instructions
 ; CHECK-NEXT:       Expand Atomic instructions
-; CHECK-NEXT:       RISC-V Zacas ABI fix 
+; CHECK-NEXT:       RISC-V Zacas ABI fix
 ; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Natural Loop Information
 ; CHECK-NEXT:       Canonicalize natural loops
@@ -109,9 +109,9 @@
 ; CHECK-NEXT:       Remove dead machine instructions
 ; CHECK-NEXT:       MachineDominator Tree Construction
 ; CHECK-NEXT:       Machine Natural Loop Construction
-; CHECK-NEXT:       Machine Trace Metrics 
-; CHECK-NEXT:       Lazy Machine Block Frequency Analysis 
-; CHECK-NEXT:       Machine InstCombiner 
+; CHECK-NEXT:       Machine Trace Metrics
+; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
+; CHECK-NEXT:       Machine InstCombiner
 ; CHECK-NEXT:       Machine Block Frequency Analysis
 ; CHECK-NEXT:       Early Machine Loop Invariant Code Motion
 ; CHECK-NEXT:       MachineDominator Tree Construction
@@ -217,6 +217,9 @@
 ; CHECK-NEXT:       RISC-V pseudo instruction expansion pass
 ; CHECK-NEXT:       RISC-V atomic pseudo instruction expansion pass
 ; CHECK-NEXT:       Unpack machine instruction bundles
+; CHECK-NEXT:       RISC-V Expand Inline Assembly 
+; CHECK-NEXT:       RISC-V PseudoBNE branch Expansion
+; CHECK-NEXT:       RISC-V count LR/SC instruction pairs
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       RISC-V Assembly Printer

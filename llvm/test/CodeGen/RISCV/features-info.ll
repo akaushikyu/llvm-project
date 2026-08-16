@@ -13,6 +13,7 @@
 ; CHECK-NEXT:   auipc-load-fusion                - Enable AUIPC + load macrofusion.
 ; CHECK-NEXT:   b                                - 'B' (the collection of the Zba, Zbb, Zbs extensions).
 ; CHECK-NEXT:   bfext-fusion                     - Enable SLLI+SRLI (bitfield extract) macrofusion.
+; CHECK-NEXT:   bnerd                            - BNERD (Branch with destination register).
 ; CHECK-NEXT:   c                                - 'C' (Compressed Instructions).
 ; CHECK-NEXT:   conditional-cmv-fusion           - Enable branch+c.mv fusion.
 ; CHECK-NEXT:   d                                - 'D' (Double-Precision Floating-Point).

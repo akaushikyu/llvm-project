@@ -212,7 +212,6 @@
 # MIR-NEXT:     PseudoBR %bb.1
 # MIR-NEXT:   bb.1 (%ir-block.17):
 # MIR-NEXT:     successors: %bb.7(0x80000000)
-# MIR-NEXT:     liveins: $x13, $x10, $x12, $x14, $x11, $x0
 # MIR-NEXT:     renamable $x10 = LW $x8, -56 :: (volatile dereferenceable load (s32) from %ir.12)
 # MIR-NEXT:     renamable $x11 = LUI target-flags(riscv-hi) @loop_before_lr_sink
 # MIR-NEXT:     renamable $x12 = LW renamable $x11, target-flags(riscv-lo) @loop_before_lr_sink :: (volatile dereferenceable load (s32) from @loop_before_lr_sink)
@@ -223,18 +222,18 @@
 # MIR-NEXT:     renamable $x12 = LW $x8, -36 :: (dereferenceable load (s32) from %ir.7)
 # MIR-NEXT:     PseudoBR %bb.7
 # MIR-NEXT:   bb.7 (%ir-block.17):
-# MIR-NEXT:     successors: %bb.8(0x40000000), %bb.9(0x40000000)
-# MIR-NEXT:     liveins: $x13, $x10, $x12, $x14, $x11, $x0, $x8
+# MIR-NEXT:     successors: %bb.9(0x40000000), %bb.8(0x40000000)
+# MIR-NEXT:     liveins: $x10, $x13, $x12, $x11, $x14, $x0, $x8
 # MIR-NEXT:     $x13 = LR_W $x10
 # MIR-NEXT:     BNE $x13, $x12, %bb.9
 # MIR-NEXT:   bb.8 (%ir-block.17):
 # MIR-NEXT:     successors: %bb.7(0x40000000), %bb.9(0x40000000)
-# MIR-NEXT:     liveins: $x13, $x10, $x12, $x14, $x11, $x0, $x8
+# MIR-NEXT:     liveins: $x10, $x13, $x12, $x11, $x14, $x0, $x8
 # MIR-NEXT:     $x14 = SC_W $x11, $x10
 # MIR-NEXT:     BNE $x14, $x0, %bb.7
 # MIR-NEXT:   bb.9 (%ir-block.17):
 # MIR-NEXT:     successors: %bb.2(0x40000000), %bb.5(0x40000000)
-# MIR-NEXT:     liveins: $x13, $x10, $x12, $x14, $x11, $x0, $x8
+# MIR-NEXT:     liveins: $x10, $x13, $x12, $x11, $x14, $x0, $x8
 # MIR-NEXT:     SW killed renamable $x13, $x8, -48 :: (store (s32) into %ir.10)
 # MIR-NEXT:     SW killed renamable $x14, $x8, -52 :: (store (s32) into %ir.11)
 # MIR-NEXT:     renamable $x10 = LW $x8, -48 :: (dereferenceable load (s32) from %ir.10)
@@ -443,14 +442,14 @@
 # JSON-NEXT:               "hasLoop": false,
 # JSON-NEXT:               "loops": [
 # JSON-NEXT:                 {
-# JSON-NEXT:                   "cycle_flavour": "LRSC",
-# JSON-NEXT:                   "num_instr": 6,
-# JSON-NEXT:                   "path": "7 -> 8 -> 7"
-# JSON-NEXT:                 },
-# JSON-NEXT:                 {
 # JSON-NEXT:                   "cycle_flavour": "LR",
 # JSON-NEXT:                   "num_instr": 26,
 # JSON-NEXT:                   "path": "1 -> 7 -> 9 -> 2 -> 3 -> 1"
+# JSON-NEXT:                 },
+# JSON-NEXT:                 {
+# JSON-NEXT:                   "cycle_flavour": "LRSC",
+# JSON-NEXT:                   "num_instr": 6,
+# JSON-NEXT:                   "path": "7 -> 8 -> 7"
 # JSON-NEXT:                 }
 # JSON-NEXT:               ],
 # JSON-NEXT:               "numberOfLoops": 0
@@ -461,14 +460,14 @@
 # JSON-NEXT:               "hasLoop": false,
 # JSON-NEXT:               "loops": [
 # JSON-NEXT:                 {
-# JSON-NEXT:                   "cycle_flavour": "LRSC",
-# JSON-NEXT:                   "num_instr": 6,
-# JSON-NEXT:                   "path": "7 -> 8 -> 7"
-# JSON-NEXT:                 },
-# JSON-NEXT:                 {
 # JSON-NEXT:                   "cycle_flavour": "LR",
 # JSON-NEXT:                   "num_instr": 26,
 # JSON-NEXT:                   "path": "1 -> 7 -> 9 -> 2 -> 3 -> 1"
+# JSON-NEXT:                 },
+# JSON-NEXT:                 {
+# JSON-NEXT:                   "cycle_flavour": "LRSC",
+# JSON-NEXT:                   "num_instr": 6,
+# JSON-NEXT:                   "path": "7 -> 8 -> 7"
 # JSON-NEXT:                 }
 # JSON-NEXT:               ],
 # JSON-NEXT:               "numberOfLoops": 0
@@ -479,14 +478,14 @@
 # JSON-NEXT:               "hasLoop": false,
 # JSON-NEXT:               "loops": [
 # JSON-NEXT:                 {
-# JSON-NEXT:                   "cycle_flavour": "LRSC",
-# JSON-NEXT:                   "num_instr": 6,
-# JSON-NEXT:                   "path": "7 -> 8 -> 7"
-# JSON-NEXT:                 },
-# JSON-NEXT:                 {
 # JSON-NEXT:                   "cycle_flavour": "LR",
 # JSON-NEXT:                   "num_instr": 26,
 # JSON-NEXT:                   "path": "1 -> 7 -> 9 -> 2 -> 3 -> 1"
+# JSON-NEXT:                 },
+# JSON-NEXT:                 {
+# JSON-NEXT:                   "cycle_flavour": "LRSC",
+# JSON-NEXT:                   "num_instr": 6,
+# JSON-NEXT:                   "path": "7 -> 8 -> 7"
 # JSON-NEXT:                 }
 # JSON-NEXT:               ],
 # JSON-NEXT:               "numberOfLoops": 0
@@ -497,14 +496,14 @@
 # JSON-NEXT:               "hasLoop": false,
 # JSON-NEXT:               "loops": [
 # JSON-NEXT:                 {
-# JSON-NEXT:                   "cycle_flavour": "LRSC",
-# JSON-NEXT:                   "num_instr": 6,
-# JSON-NEXT:                   "path": "7 -> 8 -> 7"
-# JSON-NEXT:                 },
-# JSON-NEXT:                 {
 # JSON-NEXT:                   "cycle_flavour": "LR",
 # JSON-NEXT:                   "num_instr": 26,
 # JSON-NEXT:                   "path": "1 -> 7 -> 9 -> 2 -> 3 -> 1"
+# JSON-NEXT:                 },
+# JSON-NEXT:                 {
+# JSON-NEXT:                   "cycle_flavour": "LRSC",
+# JSON-NEXT:                   "num_instr": 6,
+# JSON-NEXT:                   "path": "7 -> 8 -> 7"
 # JSON-NEXT:                 }
 # JSON-NEXT:               ],
 # JSON-NEXT:               "numberOfLoops": 0
