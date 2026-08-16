@@ -219,6 +219,7 @@
 ; CHECK-NEXT:       Unpack machine instruction bundles
 ; CHECK-NEXT:       RISC-V Expand Inline Assembly 
 ; CHECK-NEXT:       RISC-V PseudoBNE branch Expansion
+; CHECK-NEXT:       MachinePostDominator Tree Construction
 ; CHECK-NEXT:       RISC-V count LR/SC instruction pairs
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter

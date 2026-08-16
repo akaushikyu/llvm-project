@@ -215,7 +215,7 @@
 # MIR-NEXT: {{^body:             \|$}}
 # MIR-NEXT: {{^  bb\.0 \(%ir-block\.4\):$}}
 # MIR-NEXT: {{^    successors: %bb\.10\(0x80000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x2 = frame-setup ADDI \$x2, -80$}}
 # MIR-NEXT: {{^    frame-setup SD killed \$x1, \$x2, 72 :: \(store \(s64\) into %stack\.10\)$}}
@@ -231,7 +231,7 @@
 # MIR-NEXT: {{^    PseudoBR %bb\.10$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.10 \(%ir-block\.4\):$}}
-# MIR-NEXT: {{^    successors: %bb\.11\(0x40000000\), %bb\.12\(0x40000000\)$}}
+# MIR-NEXT: {{^    successors: %bb\.12\(0x40000000\), %bb\.11\(0x40000000\)$}}
 # MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}
@@ -464,20 +464,20 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        \{$}}
-# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 1,$}}
-# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 1,$}}
 # JSON-NEXT: {{^          "bb_traversal_index": 8,$}}
 # JSON-NEXT: {{^          "flavors": \{$}}
 # JSON-NEXT: {{^            "LR_D_AQ": 1$}}
 # JSON-NEXT: {{^          \},$}}
 # JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
-# JSON-NEXT: {{^            "conditional_loop_seq": 1$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
 # JSON-NEXT: {{^          \},$}}
 # JSON-NEXT: {{^          "lrsc_count": 1,$}}
 # JSON-NEXT: {{^          "mbb_number": 5,$}}
 # JSON-NEXT: {{^          "num_insn": 3,$}}
 # JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
-# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 1$}}
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        \{$}}
@@ -610,8 +610,8 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \}$}}
 # JSON-NEXT: {{^      \},$}}
-# JSON-NEXT: {{^      "total_loop_seq_conditional_lrsc_occurrences": 2,$}}
-# JSON-NEXT: {{^      "total_loop_seq_unconditional_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^      "total_loop_seq_conditional_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^      "total_loop_seq_unconditional_lrsc_occurrences": 1,$}}
 # JSON-NEXT: {{^      "total_lrsc_occurrences": 4$}}
 # JSON-NEXT: {{^    \}$}}
 # JSON-NEXT: {{^  \}$}}

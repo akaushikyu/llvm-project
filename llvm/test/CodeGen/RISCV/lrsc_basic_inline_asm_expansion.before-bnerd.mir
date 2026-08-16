@@ -167,7 +167,7 @@
 # MIR-NEXT: body:             |
 # MIR-NEXT:   bb.0 (%ir-block.3):
 # MIR-NEXT:     successors: %bb.6(0x80000000)
-# MIR-NEXT:     liveins: $x10, $x11, $x12, $x1, $x13, $x14, $x0
+# MIR-NEXT:     liveins: $x10, $x11, $x12, $x1
 # MIR-NEXT:     $x2 = frame-setup ADDI $x2, -48
 # MIR-NEXT:     frame-setup SD killed $x1, $x2, 40 :: (store (s64) into %stack.6)
 # MIR-NEXT:     frame-setup SD killed $x8, $x2, 32 :: (store (s64) into %stack.7)
@@ -180,7 +180,7 @@
 # MIR-NEXT:     renamable $x12 = LW $x8, -36 :: (dereferenceable load (s32) from %ir.6)
 # MIR-NEXT:     PseudoBR %bb.6
 # MIR-NEXT:   bb.6 (%ir-block.3):
-# MIR-NEXT:     successors: %bb.7(0x40000000), %bb.8(0x40000000)
+# MIR-NEXT:     successors: %bb.8(0x40000000), %bb.7(0x40000000)
 # MIR-NEXT:     liveins: $x10, $x11, $x12, $x1, $x13, $x14, $x0, $x8
 # MIR-NEXT:     $x13 = LR_W $x10
 # MIR-NEXT:     BNE $x13, $x12, %bb.8

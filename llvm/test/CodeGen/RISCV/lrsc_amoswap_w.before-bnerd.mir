@@ -218,7 +218,7 @@
 # MIR-NEXT: {{^body:             \|$}}
 # MIR-NEXT: {{^  bb\.0 \(%ir-block\.4\):$}}
 # MIR-NEXT: {{^    successors: %bb\.8\(0x80000000\)$}}
-# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0$}}
+# MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x2 = frame-setup ADDI \$x2, -64$}}
 # MIR-NEXT: {{^    frame-setup SD killed \$x1, \$x2, 56 :: \(store \(s64\) into %stack\.10\)$}}
@@ -234,7 +234,7 @@
 # MIR-NEXT: {{^    PseudoBR %bb\.8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^  bb\.8 \(%ir-block\.4\):$}}
-# MIR-NEXT: {{^    successors: %bb\.9\(0x40000000\), %bb\.10\(0x40000000\)$}}
+# MIR-NEXT: {{^    successors: %bb\.10\(0x40000000\), %bb\.9\(0x40000000\)$}}
 # MIR-NEXT: {{^    liveins: \$x10, \$x11, \$x12, \$x13, \$x1, \$x14, \$x0, \$x8$}}
 # MIR-NEXT: {{^  $}}
 # MIR-NEXT: {{^    \$x13 = LR_W \$x10$}}
