@@ -185,9 +185,6 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-
-std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
-
 std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
