@@ -219,12 +219,12 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
         MachineBasicBlock::iterator LRMBBI = MBBI;
         while(std::next(LRMBBI) != E){
           
-          if(std::next(LRMBBI)->isBranch()) {
+          if(std::next(LRMBBI)->isBranch() && !MPDT.dominates(SCMBB,&MBB)) {
             Counts.updateBBLoopSeqFlavCnt(MBB, true);
             LoopSeqConditionalCountBB++;
             break;
           }
-          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode())) {
+          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode()) || MPDT.dominates(SCMBB,&MBB) ) {
             Counts.updateBBLoopSeqFlavCnt(MBB, false);
             LoopSeqUnconditionalCountBB++;
             break;
