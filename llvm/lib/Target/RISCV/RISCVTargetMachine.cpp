@@ -609,12 +609,13 @@ void RISCVPassConfig::addPreEmitPass2() {
   // Expand PseudoBNE branches to a canonical form .
   addPass(createRISCVPseudoBNEBranchExpansionPass());
   addPass(createRISCVCountLRSCPass());
-  if (DumpLRSCMachineCFG) {
-    addPass(&MachineCFGPrinterID);
-  }
   if (RunBnerd) {
     addPass(createRISCVInsertBNERDSCPass());
   }
+  if (DumpLRSCMachineCFG) {
+    addPass(&MachineCFGPrinterID);
+  }
+
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {

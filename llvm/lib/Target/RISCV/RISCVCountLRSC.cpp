@@ -37,6 +37,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <algorithm>
+#include "llvm/CodeGen/MachinePostDominators.h"
 
 using namespace llvm;
 using namespace utils;
@@ -58,7 +59,10 @@ public:
 
   RISCVCountLRSC() : MachineFunctionPass(ID) {}
   ~RISCVCountLRSC();
-
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+          AU.addRequired<MachinePostDominatorTreeWrapperPass>();
+          MachineFunctionPass::getAnalysisUsage(AU);
+  }
   bool runOnMachineFunction(MachineFunction &MF) override;
 
   StringRef getPassName() const override { return RISCV_COUNT_LR_SC_NAME; }
@@ -101,6 +105,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   // unsigned totalCount = 0;
   Counts.clearAll();
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
+  
 
   /* Clear stored basic block iteration order for this MachineFunction so the
    * basic block index runs from 0 to N - 1 for this function.
@@ -180,12 +185,16 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-
 std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
-
+  MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
-
+  MachineBasicBlock *SCMBB = nullptr;
+  for(MachineBasicBlock *successor : MBB.successors()){
+    if(lrsc::isSCMBB(*successor)){
+      SCMBB = successor;
+    }
+  }
   /* Iterate over each instruction in the basic block, classify its opcode
    * against all LR/SC instruction flavours, and update the per-flavour
    * counts in the LRSCCounts mapping.
@@ -210,12 +219,12 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
         MachineBasicBlock::iterator LRMBBI = MBBI;
         while(std::next(LRMBBI) != E){
           
-          if(std::next(LRMBBI)->isBranch()) {
+          if(std::next(LRMBBI)->isBranch() && !MPDT.dominates(SCMBB,&MBB)) {
             Counts.updateBBLoopSeqFlavCnt(MBB, true);
             LoopSeqConditionalCountBB++;
             break;
           }
-          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode())) {
+          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode()) || MPDT.dominates(SCMBB,&MBB) ) {
             Counts.updateBBLoopSeqFlavCnt(MBB, false);
             LoopSeqUnconditionalCountBB++;
             break;

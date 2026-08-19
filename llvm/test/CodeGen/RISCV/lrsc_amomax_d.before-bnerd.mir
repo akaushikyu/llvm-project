@@ -465,20 +465,20 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        \{$}}
-# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 1,$}}
-# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^          "bb_total_unconditional_loop_seq_lrsc_occurrences": 1,$}}
 # JSON-NEXT: {{^          "bb_traversal_index": 8,$}}
 # JSON-NEXT: {{^          "flavors": \{$}}
 # JSON-NEXT: {{^            "LR_D_AQ": 1$}}
 # JSON-NEXT: {{^          \},$}}
 # JSON-NEXT: {{^          "loop_seq_flavours": \{$}}
-# JSON-NEXT: {{^            "conditional_loop_seq": 1$}}
+# JSON-NEXT: {{^            "conditional_loop_seq": 0$}}
 # JSON-NEXT: {{^          \},$}}
 # JSON-NEXT: {{^          "lrsc_count": 1,$}}
 # JSON-NEXT: {{^          "mbb_number": 5,$}}
 # JSON-NEXT: {{^          "num_insn": 3,$}}
 # JSON-NEXT: {{^          "uncond_loop_seq_flavours": \{$}}
-# JSON-NEXT: {{^            "unconditional_loop_seq": 0$}}
+# JSON-NEXT: {{^            "unconditional_loop_seq": 1$}}
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        \{$}}
@@ -611,8 +611,8 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \}$}}
 # JSON-NEXT: {{^      \},$}}
-# JSON-NEXT: {{^      "total_loop_seq_conditional_lrsc_occurrences": 2,$}}
-# JSON-NEXT: {{^      "total_loop_seq_unconditional_lrsc_occurrences": 0,$}}
+# JSON-NEXT: {{^      "total_loop_seq_conditional_lrsc_occurrences": 1,$}}
+# JSON-NEXT: {{^      "total_loop_seq_unconditional_lrsc_occurrences": 1,$}}
 # JSON-NEXT: {{^      "total_lrsc_occurrences": 4$}}
 # JSON-NEXT: {{^    \}$}}
 # JSON-NEXT: {{^  \}$}}

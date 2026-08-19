@@ -846,7 +846,12 @@ inline bool isSC(uint16_t opc) {
   }
   return false;
 }
-
+inline bool isSCMBB(const MachineBasicBlock &MBB) {
+  for (const MachineInstr &MI : MBB)
+    if (utils::lrsc::isSC(MI.getOpcode()))
+      return true;
+  return false;
+}
 /*--------------------------------------------------------------------------*/
 /* getLRSCWidth: Returns the width qualifier string for a given LR or SC
   opcode.

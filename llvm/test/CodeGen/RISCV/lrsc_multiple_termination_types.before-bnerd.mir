@@ -854,17 +854,17 @@
 # JSON-NEXT: {{^              "distance": 2,$}}
 # JSON-NEXT: {{^              "hasLoop": false,$}}
 # JSON-NEXT: {{^              "loops": \[$}}
-# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                {$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LR",$}}
 # JSON-NEXT: {{^                  "num_instr": 24,$}}
 # JSON-NEXT: {{^                  "path": "1 -> 16 -> 18 -> 2 -> 3 -> 1"$}}
-# JSON-NEXT: {{^                \},$}}
-# JSON-NEXT: {{^                \{$}}
+# JSON-NEXT: {{^                },$}}
+# JSON-NEXT: {{^                {$}}
 # JSON-NEXT: {{^                  "cycle_flavour": "LRSC",$}}
 # JSON-NEXT: {{^                  "num_instr": 6,$}}
 # JSON-NEXT: {{^                  "path": "16 -> 17 -> 16"$}}
-# JSON-NEXT: {{^                \}$}}
-# JSON-NEXT: {{^              \],$}}
+# JSON-NEXT: {{^                }$}}
+# JSON-NEXT: {{^              ],$}}
 # JSON-NEXT: {{^              "numberOfLoops": 0$}}
 # JSON-NEXT: {{^            \},$}}
 # JSON-NEXT: {{^            "16 -> 18 -> 2 -> 3 -> 1 -> 16": \{$}}
@@ -1413,4 +1413,3 @@ body:             |
     $x8 = frame-destroy LD $x2, 64 :: (load (s64) from %stack.13)
     $x2 = frame-destroy ADDI $x2, 80
     PseudoRET implicit $x10
-...
