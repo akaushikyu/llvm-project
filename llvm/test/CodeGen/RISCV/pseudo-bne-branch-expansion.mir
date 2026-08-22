@@ -1,0 +1,350 @@
+# RUN: llc \
+# RUN:   -mtriple=riscv64-linux-gnu \
+# RUN:   -mattr=+a,+bnerd,-zaamo \
+# RUN:   -run-pass=riscv-pseudo-bne-branch-expansion \
+# RUN:   -verify-machineinstrs \
+# RUN:   %s -o - \
+# RUN:   | FileCheck %s
+
+# REQUIRES: riscv-registered-target
+
+--- |
+  define void @after_lr_beq() {
+  entry:
+    ret void
+  }
+
+  define void @after_lr_blt() {
+  entry:
+    ret void
+  }
+
+  define void @after_lr_bge() {
+  entry:
+    ret void
+  }
+
+  define void @after_lr_bltu() {
+  entry:
+    ret void
+  }
+
+  define void @after_lr_bgeu() {
+  entry:
+    ret void
+  }
+
+  define void @non_lr_beq() {
+  entry:
+    ret void
+  }
+
+  define void @non_lr_blt() {
+  entry:
+    ret void
+  }
+
+  define void @non_lr_bge() {
+  entry:
+    ret void
+  }
+
+  define void @non_lr_bltu() {
+  entry:
+    ret void
+  }
+
+  define void @non_lr_bgeu() {
+  entry:
+    ret void
+  }
+...
+
+# ============================================================================
+# PseudoBEQUsingBNE after LR
+#
+# Input:
+#   LR
+#   PseudoBEQUsingBNE rs1, rs2, bb.2
+#
+# Expected:
+#   BNE rs1, rs2, bb.1
+#   PseudoBR bb.2
+# ============================================================================
+
+---
+name: after_lr_beq
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11, $x12
+
+    $x13 = LR_D $x10
+    dead early-clobber $x14 = PseudoBEQUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: after_lr_beq
+# CHECK:       $x13 = LR_D $x10
+# CHECK-NEXT:  BNE $x11, $x12, %bb.1
+# CHECK-NEXT:  PseudoBR %bb.2
+# CHECK-NOT:   PseudoBEQUsingBNE
+
+
+# ============================================================================
+# PseudoBLTUsingBNE after LR
+#
+# Expected:
+#   SLT scratch, rs1, rs2
+#   BNE scratch, x0, original-target
+# ============================================================================
+
+---
+name: after_lr_blt
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11, $x12
+
+    $x13 = LR_D $x10
+    dead early-clobber $x14 = PseudoBLTUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: after_lr_blt
+# CHECK:       $x13 = LR_D $x10
+# CHECK-NEXT:  $x14 = SLT $x11, $x12
+# CHECK-NEXT:  BNE $x14, $x0, %bb.2
+# CHECK-NOT:   PseudoBLTUsingBNE
+
+
+# ============================================================================
+# PseudoBGEUsingBNE after LR
+#
+# Expected:
+#   SLT scratch, rs1, rs2
+#   BNE scratch, x0, other-successor
+#   PseudoBR original-target
+# ============================================================================
+
+---
+name: after_lr_bge
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11, $x12
+
+    $x13 = LR_D $x10
+    dead early-clobber $x14 = PseudoBGEUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: after_lr_bge
+# CHECK:       $x13 = LR_D $x10
+# CHECK-NEXT:  $x14 = SLT $x11, $x12
+# CHECK-NEXT:  BNE $x14, $x0, %bb.1
+# CHECK-NEXT:  PseudoBR %bb.2
+# CHECK-NOT:   PseudoBGEUsingBNE
+
+
+# ============================================================================
+# PseudoBLTUUsingBNE after LR
+# ============================================================================
+
+---
+name: after_lr_bltu
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11, $x12
+
+    $x13 = LR_D $x10
+    dead early-clobber $x14 = PseudoBLTUUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: after_lr_bltu
+# CHECK:       $x13 = LR_D $x10
+# CHECK-NEXT:  $x14 = SLTU $x11, $x12
+# CHECK-NEXT:  BNE $x14, $x0, %bb.2
+# CHECK-NOT:   PseudoBLTUUsingBNE
+
+
+# ============================================================================
+# PseudoBGEUUsingBNE after LR
+# ============================================================================
+
+---
+name: after_lr_bgeu
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x10, $x11, $x12
+
+    $x13 = LR_D $x10
+    dead early-clobber $x14 = PseudoBGEUUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: after_lr_bgeu
+# CHECK:       $x13 = LR_D $x10
+# CHECK-NEXT:  $x14 = SLTU $x11, $x12
+# CHECK-NEXT:  BNE $x14, $x0, %bb.1
+# CHECK-NEXT:  PseudoBR %bb.2
+# CHECK-NOT:   PseudoBGEUUsingBNE
+
+
+# ============================================================================
+# Pseudos NOT after an LR
+#
+# They must simply turn back into their original RISC-V branch.
+# ============================================================================
+
+---
+name: non_lr_beq
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    dead early-clobber $x14 = PseudoBEQUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: non_lr_beq
+# CHECK:       BEQ $x11, $x12, %bb.2
+# CHECK-NOT:   PseudoBEQUsingBNE
+
+
+---
+name: non_lr_blt
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    dead early-clobber $x14 = PseudoBLTUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: non_lr_blt
+# CHECK:       BLT $x11, $x12, %bb.2
+# CHECK-NOT:   PseudoBLTUsingBNE
+
+
+---
+name: non_lr_bge
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    dead early-clobber $x14 = PseudoBGEUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: non_lr_bge
+# CHECK:       BGE $x11, $x12, %bb.2
+# CHECK-NOT:   PseudoBGEUsingBNE
+
+
+---
+name: non_lr_bltu
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    dead early-clobber $x14 = PseudoBLTUUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: non_lr_bltu
+# CHECK:       BLTU $x11, $x12, %bb.2
+# CHECK-NOT:   PseudoBLTUUsingBNE
+
+
+---
+name: non_lr_bgeu
+tracksRegLiveness: true
+selected: true
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    dead early-clobber $x14 = PseudoBGEUUsingBNE $x11, $x12, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+
+# CHECK-LABEL: name: non_lr_bgeu
+# CHECK:       BGEU $x11, $x12, %bb.2
+# CHECK-NOT:   PseudoBGEUUsingBNE
