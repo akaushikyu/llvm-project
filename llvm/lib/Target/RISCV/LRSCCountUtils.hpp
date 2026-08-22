@@ -6,6 +6,9 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#ifndef DEBUG_TYPE
+#define DEBUG_TYPE "riscv-lrsc-count"
+#endif
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
@@ -14,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "llvm/CodeGen/MachinePostDominators.h"
 using namespace llvm;
 
 namespace utils {
@@ -846,12 +850,87 @@ inline bool isSC(uint16_t opc) {
   }
   return false;
 }
+/*--------------------------------------------------------------------------*/
+/* isSCMBB: Checks if the Machine Basic Block contains an SC instruction */
 inline bool isSCMBB(const MachineBasicBlock &MBB) {
   for (const MachineInstr &MI : MBB)
     if (utils::lrsc::isSC(MI.getOpcode()))
       return true;
   return false;
 }
+/*--------------------------------------------------------------------------*/
+/* findSCMBBDFS: Does a DFS on the successors of a Machine Basic Block(MBB) and sees if any MBB contains an SC instruction */
+inline MachineBasicBlock *findSCMBBDFS(MachineBasicBlock *MBB,
+                                SmallPtrSetImpl<MachineBasicBlock *> &Visited) {
+  if (!Visited.insert(MBB).second)
+    return nullptr;
+
+  for (MachineBasicBlock *Succ : MBB->successors()) {
+    if (isSCMBB(*Succ))
+      return Succ;
+
+    if (MachineBasicBlock *SCMBB = findSCMBBDFS(Succ, Visited))
+      return SCMBB;
+  }
+
+  return nullptr;
+}
+/*--------------------------------------------------------------------------*/
+/* isBackwardBranch: Checks if TargetMBB is reached as a result of a backward branch */
+inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB) {
+  MachineFunction *MF = CurrMBB->getParent();
+    if (!CurrMBB || !TargetMBB){
+      return false;
+    }
+
+    LLVM_DEBUG(dbgs() << "=== isBackwardBranch " << MF->getName() << " ===\n"
+                    << "=== Is MBB" << TargetMBB->getNumber()
+                    << " before MBB" << CurrMBB->getNumber() << " ===\n");
+  if ( CurrMBB == TargetMBB) {
+    LLVM_DEBUG(dbgs() << "=== True===(Self loop)" << " ===\n");
+    return true;
+  }
+  for (MachineBasicBlock &MBB : *MF) {
+    LLVM_DEBUG(dbgs() << "=== MBB: " << MBB.getNumber() << " ===\n");
+
+    if (&MBB == TargetMBB) {
+      LLVM_DEBUG(dbgs() << "=== True" << " ===\n");
+      return true;   // target came first -> backward
+    }
+      
+
+    if (&MBB == CurrMBB) {
+      LLVM_DEBUG(dbgs() << "=== False" << " ===\n");
+      return false;  // current came first -> forward
+    }
+      
+  }
+
+  return false;
+}
+/*--------------------------------------------------------------------------*/
+/* isBackwardBranch: Checks if the LR/SC pair is a conditional pair */
+inline bool isConditionalLRSC(MachineBasicBlock *MBB,
+                              MachineBasicBlock *LR_MBB,
+                              MachineBasicBlock *SCMBB,
+                              MachineBasicBlock *TargetMBB,
+                              MachinePostDominatorTree &MPDT){
+  if (!SCMBB) {
+    return false;
+  }
+  else if ( LR_MBB == SCMBB) {
+    return false;
+  }
+  else {
+    if (MPDT.dominates(SCMBB,MBB) && !lrsc::isBackwardBranch(LR_MBB, TargetMBB)) {
+      return false;
+    }
+    else {
+      return true;
+    }
+  }
+}
+
 /*--------------------------------------------------------------------------*/
 /* getLRSCWidth: Returns the width qualifier string for a given LR or SC
   opcode.
