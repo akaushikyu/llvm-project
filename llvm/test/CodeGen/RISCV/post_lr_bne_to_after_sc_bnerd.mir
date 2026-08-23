@@ -1,0 +1,76 @@
+# RUN: llc \
+# RUN:   -mtriple=riscv64-linux-gnu \
+# RUN:   -mattr=+m,+a,+f,+d,+c,+bnerd,-zaamo \
+# RUN:   -riscv-run-bnerd \
+# RUN:   -verify-machineinstrs \
+# RUN:   -dump-insn-stats-json \
+# RUN:   -filetype=asm -asm-verbose=false %s -o - \
+# RUN:   | FileCheck %s --check-prefix=CHECK
+
+# REQUIRES: riscv-registered-target
+
+--- |
+  define void @post_lr_bne_to_after_sc() {
+  entry:
+    ret void
+  }
+...
+---
+name: post_lr_bne_to_after_sc
+tracksRegLiveness: true
+selected: true
+registers:
+  - { id: 0, class: gpr }
+  - { id: 1, class: gpr }
+  - { id: 2, class: gpr }
+  - { id: 3, class: gpr }
+  - { id: 4, class: gpr }
+  - { id: 5, class: gpr }
+  - { id: 6, class: gpr }
+  - { id: 7, class: gpr }
+  - { id: 8, class: gpr }
+  - { id: 9, class: gpr }
+body: |
+  bb.0:
+    successors: %bb.1
+    liveins: $x10, $x11, $x14, $x15, $x18, $x19, $x20
+    %0:gpr = COPY $x10
+    %1:gpr = COPY $x11
+    %2:gpr = COPY $x14
+    %3:gpr = COPY $x15
+    %4:gpr = COPY $x18
+    %5:gpr = COPY $x19
+    %6:gpr = COPY $x20
+
+  bb.1:
+    successors: %bb.3, %bb.2
+    %7:gpr = LR_D %0
+    BNE %2, %3, %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    %8:gpr = SC_D %1, %0
+    BNE %8, $x0, %bb.1
+
+  bb.3:
+    successors: %bb.5, %bb.4
+    BLTU %4, %5, %bb.5
+
+  bb.4:
+    PseudoRET
+
+  bb.5:
+    FENCE 3, 3
+    PseudoRET
+...
+
+# CHECK-LABEL: post_lr_bne_to_after_sc:
+# CHECK:       lr.d
+# CHECK-NEXT:  bnerd
+# CHECK:       sc.d
+# CHECK-NEXT:  bne
+# CHECK:       {{bltu|bgeu}}
+# CHECK:       fence
+# CHECK:       ret
+# CHECK:       sc.w
+# CHECK:       j
