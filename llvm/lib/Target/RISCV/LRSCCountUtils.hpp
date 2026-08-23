@@ -7,7 +7,7 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #ifndef DEBUG_TYPE
-#define DEBUG_TYPE "riscv-lrsc-count"
+#define DEBUG_TYPE "riscvcntlrsc"
 #endif
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
