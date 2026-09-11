@@ -635,6 +635,7 @@
 # JSON-NEXT:       ],
 # JSON-NEXT:       "lr_paths": {
 # JSON-NEXT:         "bb15:LR_W:$x10": {
+# JSON-NEXT:           "isBackward": false,
 # JSON-NEXT:           "terminating_paths": {
 # JSON-NEXT:             "15 -> 16": {
 # JSON-NEXT:               "cause": "SC Match",

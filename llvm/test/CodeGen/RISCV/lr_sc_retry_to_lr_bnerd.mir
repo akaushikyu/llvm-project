@@ -51,9 +51,7 @@ body: |
 
 # CHECK-LABEL: retry_to_lr_bnerd:
 # CHECK:       lr.d
-# CHECK-NEXT:  bnerd
-# CHECK:       sc.d
 # CHECK-NEXT:  bne
+# CHECK:       sc.d
+# CHECK-NEXT:  bnez
 # CHECK:       ret
-# CHECK:       sc.w
-# CHECK:       j
