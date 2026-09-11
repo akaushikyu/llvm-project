@@ -73,18 +73,18 @@ body:             |
   ; CHECK-LABEL: bb.1:
   ; CHECK:        early-clobber $x6 = SC_W $x5, $x10
   ;
-  ; Second pair (self loop): BNE -> BNERD with its own bridge block.
+  ; Second pair (self loop):
   ; CHECK-LABEL: bb.2:
   ; CHECK:        $x7 = LR_W $x11
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x7, $x0, %bb.[[BRIDGE2:[0-9]+]]
+  ; CHECK-NEXT:   BNE $x7, $x0, %bb.2
   ;
   ; CHECK-LABEL: bb.3:
   ; CHECK:        early-clobber $x28 = SC_W $x7, $x11
   ;
-  ; Third pair (loop back): BNE -> BNERD with its own bridge block.
+  ; Third pair (loop back):
   ; CHECK-LABEL: bb.4:
   ; CHECK:        $x9 = LR_W $x12
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x9, $x0, %bb.[[BRIDGE3:[0-9]+]]
+  ; CHECK-NEXT:   BNE $x9, $x0, %bb.0
   ;
   ; CHECK-LABEL: bb.5:
   ; CHECK:        early-clobber $x28 = SC_W $x9, $x12
@@ -93,13 +93,6 @@ body:             |
   ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
   ; CHECK-NEXT:   PseudoBR %bb.2
   ;
-  ; CHECK: bb.[[BRIDGE2]]:
-  ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
-  ; CHECK-NEXT:   PseudoBR %bb.2
-  ;
-  ; CHECK: bb.[[BRIDGE3]]:
-  ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
-  ; CHECK-NEXT:   PseudoBR %bb.0
   bb.0:
     successors: %bb.1, %bb.2
     liveins: $x10, $x11
