@@ -1,14 +1,12 @@
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#ifndef DEBUG_TYPE
-#define DEBUG_TYPE "riscvcntlrsc"
-#endif
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
@@ -155,6 +153,11 @@ struct LRSCCounts {
        } */
   using LRToTerminatingPathMap = std::map<MBBLRBaseRegKey, TerminatingPathMap>;
 
+
+
+  using LRIsBackwardMap = std::map<MBBLRBaseRegKey, bool>;
+
+  LRIsBackwardMap LRIsBackward;
   /*--------------------------------------------------------------------------*/
   /* Stores all LR -> terminating path information. */
   LRToTerminatingPathMap LRToTerminatingPaths;
@@ -261,6 +264,7 @@ public:
     functionLRSCCount = 0;
     totalLoopSeqConditionalLRSCCount = 0;
     totalLoopSeqUnconditionalLRSCCount = 0;
+    LRIsBackward.clear();
   }
 
   /*--------------------------------------------------------------------------*/
@@ -295,6 +299,15 @@ public:
   void setLRKey(const MachineBasicBlock &MBB, const std::string &LRInstr,
                 const std::string &LRBaseReg) {
     LRKey = buildLRKey(MBB, LRInstr, LRBaseReg);
+  }
+
+  void setLRBackward(bool isBackwardFlag) {
+    LRIsBackward[LRKey] = isBackwardFlag;
+  }
+
+  bool getLRBackward() const {
+    auto It = LRIsBackward.find(LRKey);
+    return It != LRIsBackward.end() ? It->second : false;
   }
 
   /*--------------------------------------------------------------------------*/
@@ -518,7 +531,17 @@ public:
 
       /* JSON object for one LR key. */
       llvm::json::Object LRObj;
+      
+      auto isBackwardIt = LRIsBackward.find(LocalLRKey);
+      bool isBackward;
 
+      if (isBackwardIt != LRIsBackward.end()) {
+          isBackward = isBackwardIt->second;
+      } else {
+          isBackward = false;
+      }
+
+      LRObj["isBackward"] = isBackward;
       /* JSON object containing all terminating paths for this LR. */
       llvm::json::Object TerminatingPathsObj;
 
@@ -851,6 +874,14 @@ inline bool isSC(uint16_t opc) {
   return false;
 }
 /*--------------------------------------------------------------------------*/
+/* isLRMBB: Checks if the Machine Basic Block contains an LR instruction */
+inline bool isLRMBB(const MachineBasicBlock &MBB) {
+  for (const MachineInstr &MI : MBB)
+    if (utils::lrsc::isLR(MI.getOpcode()))
+      return true;
+  return false;
+}
+/*--------------------------------------------------------------------------*/
 /* isSCMBB: Checks if the Machine Basic Block contains an SC instruction */
 inline bool isSCMBB(const MachineBasicBlock &MBB) {
   for (const MachineInstr &MI : MBB)
@@ -861,57 +892,61 @@ inline bool isSCMBB(const MachineBasicBlock &MBB) {
 /*--------------------------------------------------------------------------*/
 /* findSCMBBDFS: Does a DFS on the successors of a Machine Basic Block(MBB) and sees if any MBB contains an SC instruction */
 inline MachineBasicBlock *findSCMBBDFS(MachineBasicBlock *MBB,
-                                SmallPtrSetImpl<MachineBasicBlock *> &Visited) {
+                                SmallPtrSetImpl<MachineBasicBlock *> &Visited, unsigned depth) {
+  if (depth == 0) {
+    return nullptr;
+  }
   if (!Visited.insert(MBB).second)
     return nullptr;
 
   for (MachineBasicBlock *Succ : MBB->successors()) {
-    if (isSCMBB(*Succ))
+    if(isSCMBB(*MBB)){
+      return MBB;
+    }
+    if (isLRMBB(*Succ)) {
+      continue;
+    }
+      
+    if (isSCMBB(*Succ)){
       return Succ;
+    }
 
-    if (MachineBasicBlock *SCMBB = findSCMBBDFS(Succ, Visited))
+
+    if (MachineBasicBlock *SCMBB = findSCMBBDFS(Succ, Visited, --depth)){
       return SCMBB;
+    }
+      
   }
 
   return nullptr;
 }
 /*--------------------------------------------------------------------------*/
 /* isBackwardBranch: Checks if TargetMBB is reached as a result of a backward branch */
-inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB) {
+inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB, 
+                             const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex) {
   MachineFunction *MF = CurrMBB->getParent();
-    if (!CurrMBB || !TargetMBB){
-      return false;
-    }
+  if (!CurrMBB || !TargetMBB){
+    return false;
+  }
 
-    LLVM_DEBUG(dbgs() << "=== isBackwardBranch " << MF->getName() << " ===\n"
-                    << "=== Is MBB" << TargetMBB->getNumber()
-                    << " before MBB" << CurrMBB->getNumber() << " ===\n");
+  LLVM_DEBUG(dbgs() << "=== isBackwardBranch " << MF->getName() << " ===\n"
+                  << "=== Is MBB" << TargetMBB->getNumber()
+                  << " before MBB" << CurrMBB->getNumber() << " ===\n");
   if ( CurrMBB == TargetMBB) {
     LLVM_DEBUG(dbgs() << "=== True===(Self loop)" << " ===\n");
     return true;
   }
-  for (MachineBasicBlock &MBB : *MF) {
-    LLVM_DEBUG(dbgs() << "=== MBB: " << MBB.getNumber() << " ===\n");
-
-    if (&MBB == TargetMBB) {
-      LLVM_DEBUG(dbgs() << "=== True" << " ===\n");
-      return true;   // target came first -> backward
-    }
-      
-
-    if (&MBB == CurrMBB) {
-      LLVM_DEBUG(dbgs() << "=== False" << " ===\n");
-      return false;  // current came first -> forward
-    }
-      
+  if(RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB)){
+    LLVM_DEBUG(dbgs() << "=== True==="<<" \n");
   }
-
-  return false;
+  else{
+    LLVM_DEBUG(dbgs() << "=== False===" << "\n");
+  }
+  return RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB);
 }
 /*--------------------------------------------------------------------------*/
-/* isBackwardBranch: Checks if the LR/SC pair is a conditional pair */
-inline bool isConditionalLRSC(MachineBasicBlock *MBB,
-                              MachineBasicBlock *LR_MBB,
+/* isConditionalLRSC: Checks if the LR/SC pair is a conditional pair */
+inline bool isConditionalLRSC(MachineBasicBlock *LR_MBB,
                               MachineBasicBlock *SCMBB,
                               MachineBasicBlock *TargetMBB,
                               MachinePostDominatorTree &MPDT){
@@ -922,7 +957,7 @@ inline bool isConditionalLRSC(MachineBasicBlock *MBB,
     return false;
   }
   else {
-    if (MPDT.dominates(SCMBB,MBB) && !lrsc::isBackwardBranch(LR_MBB, TargetMBB)) {
+    if (MPDT.dominates(SCMBB,LR_MBB)) {
       return false;
     }
     else {

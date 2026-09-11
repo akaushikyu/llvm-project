@@ -203,9 +203,30 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
 // Pass entry point
 // ===========================================================================
 bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
-  LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
+//   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+//   DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
+//   unsigned Index = 0;
+//   for (MachineBasicBlock *MBB : RPOT){
+//     RPOIndex[MBB] = Index++;
+//   }
+//   LLVM_DEBUG({
+//   dbgs() << "=== RPO ===\n";
+//   for (MachineBasicBlock *MBB : RPOT)
+//     dbgs() << "MBB" << MBB->getNumber() << "\n";
 
-  
+//   dbgs() << "=== DenseMap ===\n";
+//   for (const auto &Entry : RPOIndex) {
+//     dbgs() << "MBB" << Entry.first->getNumber()
+//            << " -> " << Entry.second << "\n";
+//   }
+
+//   dbgs() << "=== RPO with indices ===\n";
+//   for (MachineBasicBlock *MBB : RPOT) {
+//     dbgs() << "MBB" << MBB->getNumber()
+//            << " -> " << RPOIndex.lookup(MBB) << "\n";
+//   }
+// });
+  LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   TII = MF.getSubtarget<RISCVSubtarget>().getInstrInfo();
   ++NumFunctions;
@@ -267,9 +288,9 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       }
 
       SmallPtrSet<MachineBasicBlock *, 16> Visited;
-      MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited);
+      MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
       MachineBasicBlock *LR_MBB = &MBB;
-      if ( !lrsc::isConditionalLRSC(&MBB, LR_MBB, SCMBB, TargetMBB, MPDT)) {
+      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT)) {
         LLVM_DEBUG(dbgs() << "=== Unconditional" << " ===\n");
         seenLRMBBs.insert(&MBB);
         continue;
