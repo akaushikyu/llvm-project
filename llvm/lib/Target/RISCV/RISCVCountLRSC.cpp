@@ -253,28 +253,22 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
         SmallPtrSet<MachineBasicBlock *, 16> Visited;
         MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
         MachineFunction &MF = *MBB.getParent();
-
+        LLVM_DEBUG({
+          if (SCMBB)
+            dbgs() << "Found SCMBB: bb." << SCMBB->getNumber() << "\n";
+          else
+            dbgs() << "SCMBB NOT FOUND\n";
+        });
 
         Counts.setLRKey(*LR_MBB, lrsc::stringifyOpcode(opc),lrsc::getRegString(*MBBI, MF));
         if (LR_MBB != SCMBB){
           Counts.setLRBackward(lrsc::isBackwardBranch(LR_MBB, TargetMBB, RPOIndex));
         }
-        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT)) {
+        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, RPOIndex)) {
 
           Counts.updateBBLoopSeqFlavCnt(MBB, true);
           
           
-          bool IsSuccessor = false;
-          for (MachineBasicBlock *SuccMBB : MBB.successors()) {
-            if (lrsc::isSCMBB(*SuccMBB)) {
-              LLVM_DEBUG(dbgs() << "=== SCMBB IS SUCCESSOR ==="<<LR_MBB->getNumber()<<"\n");
-              IsSuccessor = true;
-              break;
-            }
-          }
-          if (!IsSuccessor) {
-            LLVM_DEBUG(dbgs() << "=== SCMBB IS NOT SUCCESSOR ===MBB"<<LR_MBB->getNumber()<<"\n");
-          }
           LoopSeqConditionalCountBB++;
         }
         else {

@@ -203,29 +203,29 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
 // Pass entry point
 // ===========================================================================
 bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
-//   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-//   DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
-//   unsigned Index = 0;
-//   for (MachineBasicBlock *MBB : RPOT){
-//     RPOIndex[MBB] = Index++;
-//   }
-//   LLVM_DEBUG({
-//   dbgs() << "=== RPO ===\n";
-//   for (MachineBasicBlock *MBB : RPOT)
-//     dbgs() << "MBB" << MBB->getNumber() << "\n";
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
+  unsigned Index = 0;
+  for (MachineBasicBlock *MBB : RPOT){
+    RPOIndex[MBB] = Index++;
+  }
+  LLVM_DEBUG({
+  dbgs() << "=== RPO ===\n";
+  for (MachineBasicBlock *MBB : RPOT)
+    dbgs() << "MBB" << MBB->getNumber() << "\n";
 
-//   dbgs() << "=== DenseMap ===\n";
-//   for (const auto &Entry : RPOIndex) {
-//     dbgs() << "MBB" << Entry.first->getNumber()
-//            << " -> " << Entry.second << "\n";
-//   }
+  dbgs() << "=== DenseMap ===\n";
+  for (const auto &Entry : RPOIndex) {
+    dbgs() << "MBB" << Entry.first->getNumber()
+           << " -> " << Entry.second << "\n";
+  }
 
-//   dbgs() << "=== RPO with indices ===\n";
-//   for (MachineBasicBlock *MBB : RPOT) {
-//     dbgs() << "MBB" << MBB->getNumber()
-//            << " -> " << RPOIndex.lookup(MBB) << "\n";
-//   }
-// });
+  dbgs() << "=== RPO with indices ===\n";
+  for (MachineBasicBlock *MBB : RPOT) {
+    dbgs() << "MBB" << MBB->getNumber()
+           << " -> " << RPOIndex.lookup(MBB) << "\n";
+  }
+});
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   TII = MF.getSubtarget<RISCVSubtarget>().getInstrInfo();
@@ -290,46 +290,13 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       SmallPtrSet<MachineBasicBlock *, 16> Visited;
       MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
       MachineBasicBlock *LR_MBB = &MBB;
-      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT)) {
+      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, RPOIndex)) {
         LLVM_DEBUG(dbgs() << "=== Unconditional" << " ===\n");
         seenLRMBBs.insert(&MBB);
         continue;
       }
       LLVM_DEBUG(dbgs() << "=== Conditional" << " ===\n");
       if(Br.getOpcode() != RISCV::BNE ){
-        continue;
-      }
-
-      MachineBasicBlock *CondTarget = Br.getOperand(Br.getNumExplicitOperands() - 1).getMBB();
-
-      MachineInstr *UncondBr = nullptr;
-      auto NextI = std::next(BrI);
-
-      while(NextI != E && NextI->isDebugInstr()){
-        ++NextI;
-      }
-
-      if(NextI != E && NextI->getOpcode() == RISCV::PseudoBR){
-        UncondBr = &*NextI;
-      }
-
-
-      if(!TargetMBB || !SCMBB){
-        continue;
-      }
-
-      bool NonSCIsTaken = (CondTarget == TargetMBB);
-      bool NonSCIsNotTaken = false;
-
-      if(UncondBr){
-        MachineBasicBlock *UncondTarget = UncondBr->getOperand(UncondBr->getNumExplicitOperands() - 1).getMBB();
-
-        if(CondTarget == SCMBB && UncondTarget == TargetMBB){
-          NonSCIsNotTaken = true;
-        }
-      }
-
-      if(!NonSCIsTaken && !NonSCIsNotTaken){
         continue;
       }
       // Register FreeReg = getFreeReg(*TargetMBB, Br);
