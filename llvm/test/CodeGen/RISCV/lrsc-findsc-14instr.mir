@@ -1,0 +1,172 @@
+# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,+bnerd,-zaamo \
+# RUN:   -riscv-run-bnerd \
+# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-bnerd-sc \
+# RUN:   -debug-only=riscvcntlrsc \
+# RUN:   -dump-insn-stats-json \
+# RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=DEBUG
+#
+# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,+bnerd,-zaamo \
+# RUN:   -riscv-run-bnerd \
+# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-bnerd-sc \
+# RUN:   -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=MIR
+
+# Branch #1 (the BNE after LR):
+#   taken       -> work -> retry LR
+#   fallthrough -> branch #2
+#
+# Branches #2--#14:
+#   taken       -> SC
+#   fallthrough -> next branch
+#
+# Therefore the longest LR -> SC path is:
+#
+#   LR
+#   BNE #1
+#   BEQ #2
+#   ...
+#   BEQ #14
+#   SC
+#
+# = 16 instructions total.
+
+
+--- |
+  define void @lr_14_branches_to_sc() {
+    ret void
+  }
+...
+---
+name:            lr_14_branches_to_sc
+tracksRegLiveness: false
+body:             |
+  bb.0:
+    liveins: $x1, $x10, $x11, $x12, $x13
+    successors: %bb.15, %bb.1
+
+    $x14 = LR_W $x10
+
+    ; Branch #1
+    ; taken       -> work -> retry LR
+    ; not taken   -> fallthrough to branch #2
+    BNE $x12, $x13, %bb.15
+
+
+  ; ------------------------------------------------------------
+  ; Branch #2
+  ; taken       -> SC
+  ; fallthrough -> branch #3
+  ; ------------------------------------------------------------
+  bb.1:
+    successors: %bb.14, %bb.2
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #3
+  bb.2:
+    successors: %bb.14, %bb.3
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #4
+  bb.3:
+    successors: %bb.14, %bb.4
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #5
+  bb.4:
+    successors: %bb.14, %bb.5
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #6
+  bb.5:
+    successors: %bb.14, %bb.6
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #7
+  bb.6:
+    successors: %bb.14, %bb.7
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #8
+  bb.7:
+    successors: %bb.14, %bb.8
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #9
+  bb.8:
+    successors: %bb.14, %bb.9
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #10
+  bb.9:
+    successors: %bb.14, %bb.10
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #11
+  bb.10:
+    successors: %bb.14, %bb.11
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #12
+  bb.11:
+    successors: %bb.14, %bb.12
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #13
+  bb.12:
+    successors: %bb.14, %bb.13
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; Branch #14
+  ; taken       -> SC
+  ; not taken   -> fallthrough to SC
+  bb.13:
+    successors: %bb.14
+
+    BEQ $x12, $x13, %bb.14
+
+
+  ; SC block
+  bb.14:
+    $x15 = SC_W $x11, $x10
+    PseudoRET implicit $x1
+
+
+  ; Work/retry block
+  bb.15:
+    successors: %bb.0
+
+    $x12 = ADDI $x12, 1
+    PseudoBR %bb.0
+...
+# DEBUG: Found SCMBB: bb.14
+# MIR-LABEL: name: lr_14_branches_to_sc
+# MIR: bb.0:
+# MIR: $x14 = LR_W $x10
+# MIR-NEXT: $x0 = BNERD $x12, $x13, %bb.16
+# MIR: bb.14:
+# MIR: $x15 = SC_W $x11, $x10
