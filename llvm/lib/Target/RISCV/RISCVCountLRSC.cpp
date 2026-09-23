@@ -189,12 +189,23 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
-  MachineBasicBlock *SCMBB = nullptr;
-  for(MachineBasicBlock *successor : MBB.successors()){
-    if(lrsc::isSCMBB(*successor)){
-      SCMBB = successor;
-    }
+  MachineBasicBlock *LR_MBB = &MBB;
+
+  MachineBasicBlock *TargetMBB = nullptr;
+  MachineBasicBlock *FalseMBB = nullptr;
+  SmallVector<MachineOperand, 4> Cond;
+
+  const TargetInstrInfo *TII = MBB.getParent()->getSubtarget().getInstrInfo();
+
+  if (!TII->analyzeBranch(MBB, TargetMBB, FalseMBB, Cond)) {
+    FalseMBB = FalseMBB ? FalseMBB : MBB.getFallThrough();
   }
+
+  SmallPtrSet<MachineBasicBlock *, 16> Visited;
+  MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited);
+
+
+
   /* Iterate over each instruction in the basic block, classify its opcode
    * against all LR/SC instruction flavours, and update the per-flavour
    * counts in the LRSCCounts mapping.
@@ -204,7 +215,6 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
   unsigned LoopSeqUnconditionalCountBB = 0;
   uint16_t opc = 0;
   while (MBBI != E) {
-
     opc = MBBI->getOpcode();
     switch (opc) {
       // LR flavours
@@ -216,24 +226,15 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
       case RISCV::LR_W_RL:
       case RISCV::LR_D_AQRL:
       case RISCV::LR_W_AQRL:{
-        MachineBasicBlock::iterator LRMBBI = MBBI;
-        while(std::next(LRMBBI) != E){
-          
-          if(std::next(LRMBBI)->isBranch() && !MPDT.dominates(SCMBB,&MBB)) {
+        if(lrsc::isConditionalLRSC(&MBB, LR_MBB, SCMBB, TargetMBB, MPDT)) {
             Counts.updateBBLoopSeqFlavCnt(MBB, true);
             LoopSeqConditionalCountBB++;
-            break;
-          }
-          else if(lrsc::isSC(std::next(LRMBBI)->getOpcode()) || MPDT.dominates(SCMBB,&MBB) ) {
+        }
+        else {
             Counts.updateBBLoopSeqFlavCnt(MBB, false);
             LoopSeqUnconditionalCountBB++;
-            break;
-          }
-          LRMBBI++;
         }
-        
       }
-        
       // SC flavours
       case RISCV::SC_W:
       case RISCV::SC_D:

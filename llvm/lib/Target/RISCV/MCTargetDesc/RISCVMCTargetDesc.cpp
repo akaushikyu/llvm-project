@@ -222,7 +222,10 @@ public:
                       uint64_t &Target) const override {
     if (isConditionalBranch(Inst)) {
       int64_t Imm;
-      if (Size == 2)
+      if (Inst.getOpcode() == RISCV::BNERD){
+        Imm = Inst.getOperand(3).getImm();
+      }
+      else if (Size == 2)
         Imm = Inst.getOperand(1).getImm();
       else
         Imm = Inst.getOperand(2).getImm();

@@ -2,7 +2,6 @@
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s
 --- |
   define void @bne_after_lr(ptr %p) { ret void }
-  define void @beq_after_lr(ptr %p) { ret void }
   define void @lr_no_branch(ptr %p) { ret void }
   define void @multiple_lrsc_pairs(ptr %p, ptr %q) { ret void }
 ...
@@ -14,15 +13,15 @@ name:            bne_after_lr
 tracksRegLiveness: true
 body:             |
   ; CHECK-LABEL: name: bne_after_lr
-  ; CHECK:      bb.0:
-  ; CHECK:        LR_W
+  ; CHECK-LABEL: bb.0:
+  ; CHECK:        $x5 = LR_W $x10
   ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x5, $x0, %bb.[[BRIDGE:[0-9]+]]
-  ;
-  ; CHECK:      bb.1:
-  ; CHECK:        SC_W
-  ;
-  ; CHECK:      bb.[[BRIDGE]]:
-  ; CHECK:         $x0 = SC_W ${{x[0-9]+}}, $x0
+
+  ; CHECK-LABEL: bb.1:
+  ; CHECK:        early-clobber $x6 = SC_W $x5, $x10
+
+  ; CHECK: bb.[[BRIDGE]]:
+  ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
   ; CHECK-NEXT:   PseudoBR %bb.2
   bb.0:
     successors: %bb.1, %bb.2
@@ -48,12 +47,13 @@ body:             |
   ; CHECK:      bb.0:
   ; CHECK:        LR_W
   ; CHECK-NEXT:   ADDI
+  ; CHECK-NEXT:   SC
   ; CHECK-NOT:    BNERD
-  ; CHECK-NOT:    BEQRD
   bb.0:
     liveins: $x10
     $x5 = LR_W $x10
     $x6 = ADDI $x5, 1
+    early-clobber $x6 = SC_W $x5, $x10
     PseudoRET
 ...
 # -----------------------------------------------------------------------------
@@ -66,28 +66,40 @@ body:             |
   ; CHECK-LABEL: name: multiple_lrsc_pairs
   ;
   ; First pair: BNE -> BNERD with its own bridge block.
-  ; CHECK:      bb.0:
+  ; CHECK-LABEL: bb.0:
   ; CHECK:        $x5 = LR_W $x10
   ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x5, $x0, %bb.[[BRIDGE1:[0-9]+]]
   ;
-  ; CHECK:      bb.1:
-  ; CHECK:        SC_W
+  ; CHECK-LABEL: bb.1:
+  ; CHECK:        early-clobber $x6 = SC_W $x5, $x10
   ;
-  ; Second pair: BEQ -> BNERD with its own bridge block.
-  ; CHECK:      bb.2:
+  ; Second pair (self loop): BNE -> BNERD with its own bridge block.
+  ; CHECK-LABEL: bb.2:
   ; CHECK:        $x7 = LR_W $x11
   ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x7, $x0, %bb.[[BRIDGE2:[0-9]+]]
   ;
-  ; CHECK:      bb.3:
-  ; CHECK:        SC_W
+  ; CHECK-LABEL: bb.3:
+  ; CHECK:        early-clobber $x28 = SC_W $x7, $x11
   ;
-  ; CHECK:      bb.[[BRIDGE1]]:
+  ; Third pair (loop back): BNE -> BNERD with its own bridge block.
+  ; CHECK-LABEL: bb.4:
+  ; CHECK:        $x9 = LR_W $x12
+  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x9, $x0, %bb.[[BRIDGE3:[0-9]+]]
+  ;
+  ; CHECK-LABEL: bb.5:
+  ; CHECK:        early-clobber $x28 = SC_W $x9, $x12
+  ;
+  ; CHECK: bb.[[BRIDGE1]]:
   ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
   ; CHECK-NEXT:   PseudoBR %bb.2
   ;
-  ; CHECK:      bb.[[BRIDGE2]]:
+  ; CHECK: bb.[[BRIDGE2]]:
   ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
-  ; CHECK-NEXT:   PseudoBR %bb.4
+  ; CHECK-NEXT:   PseudoBR %bb.2
+  ;
+  ; CHECK: bb.[[BRIDGE3]]:
+  ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
+  ; CHECK-NEXT:   PseudoBR %bb.0
   bb.0:
     successors: %bb.1, %bb.2
     liveins: $x10, $x11
@@ -99,15 +111,26 @@ body:             |
     early-clobber $x6 = SC_W $x5, $x10
     PseudoBR %bb.2
   bb.2:
-    successors: %bb.3, %bb.4
+    successors: %bb.2, %bb.3
     liveins: $x11
     $x7 = LR_W $x11
-    BNE $x7, $x0, %bb.4
+    BNE $x7, $x0, %bb.2
   bb.3:
     successors: %bb.4
     liveins: $x7, $x11
     early-clobber $x28 = SC_W $x7, $x11
     PseudoBR %bb.4
   bb.4:
+    successors: %bb.5, %bb.0
+    liveins: $x12
+    $x9 = LR_W $x12
+    BNE $x9, $x0, %bb.0
+  bb.5:
+    successors: %bb.6
+    liveins: $x9, $x12
+    early-clobber $x28 = SC_W $x9, $x12
+    PseudoBR %bb.6
+  bb.6:
     PseudoRET
 ...
+

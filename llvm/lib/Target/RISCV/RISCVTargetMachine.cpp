@@ -605,17 +605,23 @@ void RISCVPassConfig::addPreEmitPass2() {
 
 
   addPass(createRISCVExpandINLINEASMPass());
-    // add pass to count LR/SC instruction pairs...
+
+
+  
   // Expand PseudoBNE branches to a canonical form .
   addPass(createRISCVPseudoBNEBranchExpansionPass());
+
+  // Add pass to count LR/SC instruction pairs
   addPass(createRISCVCountLRSCPass());
+
+  // Add pass to insert bnerd + dummy sc
   if (RunBnerd) {
     addPass(createRISCVInsertBNERDSCPass());
   }
+  // Add pass to make .dot files of mcfg
   if (DumpLRSCMachineCFG) {
     addPass(&MachineCFGPrinterID);
   }
-
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
