@@ -71,7 +71,7 @@ std::string RISCVPseudoBNEBranchExpansion::ModuleName = "";
 
 INITIALIZE_PASS(
     RISCVPseudoBNEBranchExpansion,
-    "riscv-pseudo-bne-branch-expansion",
+    "riscv-bne-branch-expansion",
     RISCV_PSEUDO_BNE_BRANCH_EXPANSION_NAME,
     false,
     false)
@@ -154,10 +154,6 @@ bool RISCVPseudoBNEBranchExpansion::runOnMachineFunction(
                       << " opcode=" << TII->getName(ScanOpc)
                       << "\n");
 
-            if (MBBI == ScanI) {
-              MBBI = std::next(ScanI);
-            }
-              
             bool BranchChanged = branchToBNE(MBB, ScanI, isAfterLR);
             Changed |= BranchChanged;
 

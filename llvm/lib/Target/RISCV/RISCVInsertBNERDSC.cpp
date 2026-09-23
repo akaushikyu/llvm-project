@@ -16,7 +16,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
-#include "llvm/ADT/Statistic.h"
 #define RISCV_INSERT_BNERD_SC_NAME "RISC-V insert bnerd sc"
 #define DEBUG_TYPE "riscv-insert-bnerd-sc"
 
@@ -63,7 +62,9 @@ namespace {
         // static Register getFreeReg(const MachineBasicBlock &MBB,
         //                         const MachineInstr &Br);
 
+        static bool isSCMBB(const MachineBasicBlock &MBB);
         static MachineBasicBlock::iterator isBranchAfter(MachineInstr &MI);
+
         const RISCVInstrInfo *TII = nullptr;
           unsigned NumFunctions   = 0;
           unsigned NumLRs   = 0;
@@ -169,7 +170,12 @@ RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
 //   return Register(); // no free register found
   
 // }
-
+bool RISCVInsertBNERDSC::isSCMBB(const MachineBasicBlock &MBB) {
+  for (const MachineInstr &MI : MBB)
+    if (utils::lrsc::isSC(MI.getOpcode()))
+      return true;
+  return false;
+}
 MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) {
   MachineBasicBlock::iterator MBBI = MI.getIterator();
   MachineBasicBlock::iterator E = MI.getParent()->end();
@@ -204,8 +210,6 @@ MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) 
 // ===========================================================================
 bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
-
-  
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   TII = MF.getSubtarget<RISCVSubtarget>().getInstrInfo();
   ++NumFunctions;
@@ -237,7 +241,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       /* Extract the opcode of the current instruction for classification. */
       uint16_t opc = MI.getOpcode();
       /* Log the raw opcode value of the current instruction. */
-      LLVM_DEBUG(dbgs() << "  Instr: " << TII->getName(MI.getOpcode()) << "\n");
+      LLVM_DEBUG(dbgs() << "  Instr opcode: " << opc << "\n");
       if(!(utils::lrsc::isLR(opc))){
         continue;
       }
@@ -255,27 +259,23 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       }
       MachineInstr &Br = *BrI;
 
-      MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
       MachineBasicBlock *TargetMBB = nullptr;
-      MachineBasicBlock *FalseMBB = nullptr;
-      SmallVector<MachineOperand, 4> Cond;
-
-      const TargetInstrInfo *TII = MBB.getParent()->getSubtarget().getInstrInfo();
-
-      if (!TII->analyzeBranch(MBB, TargetMBB, FalseMBB, Cond)) {
-        FalseMBB = FalseMBB ? FalseMBB : MBB.getFallThrough();
-      }
-
-      SmallPtrSet<MachineBasicBlock *, 16> Visited;
-      MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited);
+      MachineBasicBlock *SCMBB = nullptr;
       MachineBasicBlock *LR_MBB = &MBB;
-      if ( !lrsc::isConditionalLRSC(&MBB, LR_MBB, SCMBB, TargetMBB, MPDT)) {
-        LLVM_DEBUG(dbgs() << "=== Unconditional" << " ===\n");
+      for(MachineBasicBlock *successor : MBB.successors()){
+        if(isSCMBB(*successor)){
+          SCMBB = successor;
+        }
+        else{
+          TargetMBB = successor;
+        }
+      }
+      if ( MPDT.dominates(SCMBB,LR_MBB)) {
         seenLRMBBs.insert(&MBB);
         continue;
       }
-      LLVM_DEBUG(dbgs() << "=== Conditional" << " ===\n");
-      if(Br.getOpcode() != RISCV::BNE ){
+
+      if(Br.getOpcode() != RISCV::BNE && Br.getOpcode() != RISCV::BEQ){
         continue;
       }
 
