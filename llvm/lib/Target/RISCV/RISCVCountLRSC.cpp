@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Support/Debug.h"
 #define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
 #define DEBUG_TYPE "riscvcntlrsc"
 
@@ -75,7 +76,7 @@ private:
   /* Added MachineFunction &MF as a parameter so LR/SC counts can be
    * attributed to the containing function.
    */
-  std::tuple<unsigned, unsigned, unsigned> countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB);
+  std::tuple<unsigned, unsigned, unsigned> countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB, const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex);
   
 
   /* Struct defined in LRSCCountUtils.hpp. */
@@ -102,6 +103,29 @@ RISCVCountLRSC::~RISCVCountLRSC() {
 }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
+  unsigned Index = 0;
+  for (MachineBasicBlock *MBB : RPOT){
+    RPOIndex[MBB] = Index++;
+  }
+  LLVM_DEBUG({
+  dbgs() << "=== RPO ===\n";
+  for (MachineBasicBlock *MBB : RPOT)
+    dbgs() << "MBB" << MBB->getNumber() << "\n";
+
+  dbgs() << "=== DenseMap ===\n";
+  for (const auto &Entry : RPOIndex) {
+    dbgs() << "MBB" << Entry.first->getNumber()
+           << " -> " << Entry.second << "\n";
+  }
+
+  dbgs() << "=== RPO with indices ===\n";
+  for (MachineBasicBlock *MBB : RPOT) {
+    dbgs() << "MBB" << MBB->getNumber()
+           << " -> " << RPOIndex.lookup(MBB) << "\n";
+  }
+});
   // unsigned totalCount = 0;
   Counts.clearAll();
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
@@ -113,6 +137,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
 
   llvm::Module* m = MF.getFunction().getParent();
   RISCVCountLRSC::ModuleName = m->getModuleIdentifier();
+
 
   Counts.basicBlockOrder = std::vector<const MachineBasicBlock*>(0, nullptr);
 
@@ -143,7 +168,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     Order.push_back(&MBB);
 
     /* Number of LR/SC instructions detected in this basic block. */
-    statPerBBCnt = countLRSC(Counts, MBB);
+    statPerBBCnt = countLRSC(Counts, MBB, RPOIndex);
 
     /* Ensure the MF -> BB entry exists even if this basic block has zero
      * LR/SC instructions.
@@ -185,7 +210,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
+std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB, const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex) {
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
@@ -201,8 +226,7 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
     FalseMBB = FalseMBB ? FalseMBB : MBB.getFallThrough();
   }
 
-  SmallPtrSet<MachineBasicBlock *, 16> Visited;
-  MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited);
+  
 
 
 
@@ -226,9 +250,26 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
       case RISCV::LR_W_RL:
       case RISCV::LR_D_AQRL:
       case RISCV::LR_W_AQRL:{
-        if(lrsc::isConditionalLRSC(&MBB, LR_MBB, SCMBB, TargetMBB, MPDT)) {
-            Counts.updateBBLoopSeqFlavCnt(MBB, true);
-            LoopSeqConditionalCountBB++;
+        SmallPtrSet<MachineBasicBlock *, 16> Visited;
+        MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
+        MachineFunction &MF = *MBB.getParent();
+        LLVM_DEBUG({
+          if (SCMBB)
+            dbgs() << "Found SCMBB: bb." << SCMBB->getNumber() << "\n";
+          else
+            dbgs() << "SCMBB NOT FOUND\n";
+        });
+
+        Counts.setLRKey(*LR_MBB, lrsc::stringifyOpcode(opc),lrsc::getRegString(*MBBI, MF));
+        if (LR_MBB != SCMBB){
+          Counts.setLRBackward(lrsc::isBackwardBranch(LR_MBB, TargetMBB, RPOIndex));
+        }
+        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, RPOIndex)) {
+
+          Counts.updateBBLoopSeqFlavCnt(MBB, true);
+          
+          
+          LoopSeqConditionalCountBB++;
         }
         else {
             Counts.updateBBLoopSeqFlavCnt(MBB, false);

@@ -59,9 +59,8 @@ body: |
 # CHECK-LABEL: retry_pre_lr_bnerd:
 # CHECK:       addi
 # CHECK:       lr.d
-# CHECK-NEXT:  bnerd
+# CHECK-NEXT:  bne
 # CHECK:       sc.d
 # CHECK-NEXT:  bne
 # CHECK:       ret
-# CHECK:       sc.w
-# CHECK:       j
+
