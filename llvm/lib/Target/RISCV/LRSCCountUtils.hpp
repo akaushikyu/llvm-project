@@ -12,6 +12,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -154,10 +155,11 @@ struct LRSCCounts {
   using LRToTerminatingPathMap = std::map<MBBLRBaseRegKey, TerminatingPathMap>;
 
 
+  using LRDeadRegMap = std::map<MBBLRBaseRegKey, std::set<std::string> >;
+  LRDeadRegMap LRDeadRegs;
+  // using LRIsBackwardMap = std::map<MBBLRBaseRegKey, bool>;
 
-  using LRIsBackwardMap = std::map<MBBLRBaseRegKey, bool>;
-
-  LRIsBackwardMap LRIsBackward;
+  // LRIsBackwardMap LRIsBackward;
   /*--------------------------------------------------------------------------*/
   /* Stores all LR -> terminating path information. */
   LRToTerminatingPathMap LRToTerminatingPaths;
@@ -264,7 +266,8 @@ public:
     functionLRSCCount = 0;
     totalLoopSeqConditionalLRSCCount = 0;
     totalLoopSeqUnconditionalLRSCCount = 0;
-    LRIsBackward.clear();
+    LRDeadRegs.clear();
+    // LRIsBackward.clear();
   }
 
   /*--------------------------------------------------------------------------*/
@@ -301,14 +304,14 @@ public:
     LRKey = buildLRKey(MBB, LRInstr, LRBaseReg);
   }
 
-  void setLRBackward(bool isBackwardFlag) {
-    LRIsBackward[LRKey] = isBackwardFlag;
-  }
+  // void setLRBackward(bool isBackwardFlag) {
+  //   LRIsBackward[LRKey] = isBackwardFlag;
+  // }
 
-  bool getLRBackward() const {
-    auto It = LRIsBackward.find(LRKey);
-    return It != LRIsBackward.end() ? It->second : false;
-  }
+  // bool getLRBackward() const {
+  //   auto It = LRIsBackward.find(LRKey);
+  //   return It != LRIsBackward.end() ? It->second : false;
+  // }
 
   /*--------------------------------------------------------------------------*/
   /* Gets the current LR key. */
@@ -318,6 +321,10 @@ public:
   /* Clears the current LR key. */
   void clearLRKey() { LRKey.clear(); }
 
+
+  void addDeadReg(const std::string &LRKey, const std::string &Reg) {
+    LRDeadRegs[LRKey].insert(Reg);
+  }
   /*--------------------------------------------------------------------------*/
   /* Updates the per-function total Conditional/Unconditional LR count for the
    * provided Func by adding mfCount. */
@@ -532,16 +539,16 @@ public:
       /* JSON object for one LR key. */
       llvm::json::Object LRObj;
       
-      auto isBackwardIt = LRIsBackward.find(LocalLRKey);
-      bool isBackward;
+      // auto isBackwardIt = LRIsBackward.find(LocalLRKey);
+      // bool isBackward;
 
-      if (isBackwardIt != LRIsBackward.end()) {
-          isBackward = isBackwardIt->second;
-      } else {
-          isBackward = false;
-      }
+      // if (isBackwardIt != LRIsBackward.end()) {
+      //     isBackward = isBackwardIt->second;
+      // } else {
+      //     isBackward = false;
+      // }
+      // LRObj["isBackward"] = isBackward;
 
-      LRObj["isBackward"] = isBackward;
       /* JSON object containing all terminating paths for this LR. */
       llvm::json::Object TerminatingPathsObj;
 
@@ -609,7 +616,29 @@ public:
 
     return LRPathsObj;
   }
+    llvm::json::Object buildLRDeadRegsJSON() const {
+      llvm::json::Object LRDeadRegsObj;
 
+      for (const auto &LRPair : LRDeadRegs) {
+        const MBBLRBaseRegKey &LocalLRKey = LRPair.first;
+        const std::set<std::string> &DeadRegs = LRPair.second;
+
+        llvm::json::Object LRObj;
+        llvm::json::Array DeadRegsArray;
+
+        for (const std::string &Reg : DeadRegs)
+          DeadRegsArray.push_back(Reg);
+
+        LRObj["number_of_dead_regs"] =
+            static_cast<int64_t>(DeadRegs.size());
+
+        LRObj["dead_regs"] = std::move(DeadRegsArray);
+
+        LRDeadRegsObj[LocalLRKey] = std::move(LRObj);
+      }
+
+      return LRDeadRegsObj;
+    }
   /*--------------------------------------------------------------------------*/
   /* Serializes the entire structure to JSON in the following high-level shape:
 
@@ -759,6 +788,7 @@ public:
 
     /* Attach LR -> terminating path information under this function. */
     FObj["lr_paths"] = buildLRPathsJSON();
+    FObj["lr_dead_regs"] = buildLRDeadRegsJSON();
     /* Insert function object into the function map keyed by function name. */
     FuncMap.try_emplace(std::move(MF.getName()), std::move(FObj));
   }
@@ -1003,37 +1033,37 @@ inline void findSCAndLRRetry(MachineBasicBlock *LRMBB,
                               return;
                             }
 /*--------------------------------------------------------------------------*/
+//TODO: This fucntion is not implemented correctly. I should check the offset like done in BranchRelaxation.cpp
 /* isBackwardBranch: Checks if TargetMBB is reached as a result of a backward branch */
-inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB, 
-                             const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex) {
-  MachineFunction *MF = CurrMBB->getParent();
-  if (!CurrMBB || !TargetMBB){
-    return false;
-  }
+// inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB, 
+//                              const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex) {
+//   MachineFunction *MF = CurrMBB->getParent();
+//   if (!CurrMBB || !TargetMBB){
+//     return false;
+//   }
 
-  LLVM_DEBUG(dbgs() << "=== isBackwardBranch " << MF->getName() << " ===\n"
-                  << "=== Is MBB" << TargetMBB->getNumber()
-                  << " before MBB" << CurrMBB->getNumber() << " ===\n");
-  if ( CurrMBB == TargetMBB) {
-    LLVM_DEBUG(dbgs() << "=== True===(Self loop)" << " ===\n");
-    return true;
-  }
-  if(RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB)){
-    LLVM_DEBUG(dbgs() << "=== True==="<<" \n");
-  }
-  else{
-    LLVM_DEBUG(dbgs() << "=== False===" << "\n");
-  }
-  return RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB);
-}
+//   LLVM_DEBUG(dbgs() << "=== isBackwardBranch " << MF->getName() << " ===\n"
+//                   << "=== Is MBB" << TargetMBB->getNumber()
+//                   << " before MBB" << CurrMBB->getNumber() << " ===\n");
+//   if ( CurrMBB == TargetMBB) {
+//     LLVM_DEBUG(dbgs() << "=== True===(Self loop)" << " ===\n");
+//     return true;
+//   }
+//   if(RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB)){
+//     LLVM_DEBUG(dbgs() << "=== True==="<<" \n");
+//   }
+//   else{
+//     LLVM_DEBUG(dbgs() << "=== False===" << "\n");
+//   }
+//   return RPOIndex.lookup(TargetMBB) < RPOIndex.lookup(CurrMBB);
+// }
 /*--------------------------------------------------------------------------*/
 /* isConditionalLRSC: Checks if the LR/SC pair is a conditional pair */
 inline bool isConditionalLRSC(MachineBasicBlock *LR_MBB,
                               MachineBasicBlock *SCMBB,
                               MachineBasicBlock *TargetMBB,
                               MachinePostDominatorTree &MPDT,
-                              bool isLRRetry,
-                              const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex){
+                              bool isLRRetry){
   if (!SCMBB) {
     return false;
   }
@@ -1041,20 +1071,45 @@ inline bool isConditionalLRSC(MachineBasicBlock *LR_MBB,
     return false;
   }
   else {
-    if (!isBackwardBranch(LR_MBB, TargetMBB, RPOIndex)) {
+    
       if (MPDT.dominates(SCMBB,LR_MBB) && !isLRRetry ) {
         return false;
       }
       else {
         return true;
       }
-    }
-    else{
-      return false;
-    } 
   }
 }
 
+inline MachineBasicBlock::iterator isBranchAfter(MachineInstr &MI) {
+  MachineBasicBlock::iterator MBBI = MI.getIterator();
+  MachineBasicBlock::iterator E = MI.getParent()->end();
+  while(MBBI != E) {
+    switch (MBBI->getOpcode()) {
+      case RISCV::BEQ:
+      case RISCV::BNE:
+      case RISCV::BLT:
+      case RISCV::BGE:
+      case RISCV::BLTU:
+      case RISCV::BGEU:
+        return MBBI;
+      case RISCV::SC_W:
+      case RISCV::SC_D:
+      case RISCV::SC_D_AQ:
+      case RISCV::SC_W_AQ:
+      case RISCV::SC_D_RL:
+      case RISCV::SC_W_RL:
+      case RISCV::SC_D_AQRL:
+      case RISCV::SC_W_AQRL:
+        return E;
+      default:
+        break;
+        
+    }
+    MBBI++;
+  }
+  return E;
+}
 /*--------------------------------------------------------------------------*/
 /* getLRSCWidth: Returns the width qualifier string for a given LR or SC
   opcode.
