@@ -1,0 +1,72 @@
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: cp %s %t/dead-reg.mir
+# RUN: cd %t && llc -mtriple=riscv64-unknown-elf \
+# RUN:   -run-pass=riscv-count-lr-sc \
+# RUN:   -dump-insn-stats-json \
+# RUN:   -verify-machineinstrs \
+# RUN:   dead-reg.mir -o /dev/null
+# RUN: FileCheck %s --check-prefix=JSON < %t/dead-reg.mir.lrscStats.json
+
+# We deliberately make $x5 and $x6 dead after the LR/BNE:
+#
+#   $x5 = ...
+#   $x6 = ...
+#   $x10 = LR_W ...
+#   BNE $x10, $x0, %bb.2
+#
+# Neither $x5 nor $x6 is used after the branch.
+
+# JSON:      "lr_dead_regs": {
+# JSON:        "bb0:LR_W:$x11": {
+# JSON:          "dead_regs": [
+# JSON-DAG:        "X5"
+# JSON-DAG:        "X6"
+# JSON:          ],
+# JSON:          "number_of_dead_regs": {{[0-9]+}}
+# JSON:        }
+# JSON:      }
+
+--- |
+  define void @dead_regs_after_lr(ptr %addr) {
+  entry:
+    ret void
+  }
+...
+---
+name:            dead_regs_after_lr
+tracksRegLiveness: true
+liveins:
+  - { reg: '$x11' }
+  - { reg: '$x12' }
+
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $x11, $x12
+
+    ; These two values are deliberately never used afterwards.
+    $x5 = ADDI $x0, 5
+    $x6 = ADDI $x0, 6
+
+    ; LR result is needed by the branch.
+    $x10 = LR_W $x11
+
+    ; At this point x5 and x6 should be dead.
+    BNE $x10, $x0, %bb.2
+
+  bb.1:
+    successors: %bb.3
+    liveins: $x11, $x12
+
+    ; Successful path reaches the matching SC.
+    $x13 = SC_W $x12, $x11
+    PseudoBR %bb.3
+
+  bb.2:
+    successors: %bb.3
+
+    ; Exit path from the conditional branch.
+    PseudoBR %bb.3
+
+  bb.3:
+    PseudoRET

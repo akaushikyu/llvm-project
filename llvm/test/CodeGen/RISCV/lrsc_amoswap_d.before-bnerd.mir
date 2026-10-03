@@ -503,9 +503,8 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \}$}}
 # JSON-NEXT: {{^      \],$}}
-# JSON-NEXT: {{^      "lr_paths": \{$}}
+# JSON: {{^      "lr_paths": \{$}}
 # JSON-NEXT: {{^        "bb5:LR_D_AQ:\$x11": \{$}}
-# JSON-NEXT: {{^          "isBackward": false,$}}
 # JSON-NEXT: {{^          "terminating_paths": \{$}}
 # JSON-NEXT: {{^            "5": \{$}}
 # JSON-NEXT: {{^              "cause": "SC Match",$}}
@@ -517,7 +516,6 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        "bb8:LR_W:\$x10": \{$}}
-# JSON-NEXT: {{^          "isBackward": false,$}}
 # JSON-NEXT: {{^          "terminating_paths": \{$}}
 # JSON-NEXT: {{^            "8 -> 10 -> 1 -> 7": \{$}}
 # JSON-NEXT: {{^              "cause": "RETURN",$}}
