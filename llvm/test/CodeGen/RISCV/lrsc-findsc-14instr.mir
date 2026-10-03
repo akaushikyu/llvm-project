@@ -39,125 +39,101 @@
 ...
 ---
 name:            lr_14_branches_to_sc
-tracksRegLiveness: false
+tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.15, %bb.1
 
     $x14 = LR_W $x10
-
-    ; Branch #1
-    ; taken       -> work -> retry LR
-    ; not taken   -> fallthrough to branch #2
     BNE $x12, $x13, %bb.15
 
-
-  ; ------------------------------------------------------------
-  ; Branch #2
-  ; taken       -> SC
-  ; fallthrough -> branch #3
-  ; ------------------------------------------------------------
   bb.1:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.2
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #3
   bb.2:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.3
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #4
   bb.3:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.4
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #5
   bb.4:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.5
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #6
   bb.5:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.6
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #7
   bb.6:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.7
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #8
   bb.7:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.8
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #9
   bb.8:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.9
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #10
   bb.9:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.10
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #11
   bb.10:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.11
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #12
   bb.11:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.12
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #13
   bb.12:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14, %bb.13
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; Branch #14
-  ; taken       -> SC
-  ; not taken   -> fallthrough to SC
   bb.13:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.14
 
     BEQ $x12, $x13, %bb.14
 
-
-  ; SC block
   bb.14:
+    liveins: $x1, $x10, $x11
+
     $x15 = SC_W $x11, $x10
     PseudoRET implicit $x1
 
-
-  ; Work/retry block
   bb.15:
+    liveins: $x1, $x10, $x11, $x12, $x13
     successors: %bb.0
 
     $x12 = ADDI $x12, 1

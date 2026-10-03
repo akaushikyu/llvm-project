@@ -846,9 +846,8 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \}$}}
 # JSON-NEXT: {{^      \],$}}
-# JSON-NEXT: {{^      "lr_paths": \{$}}
+# JSON: {{^      "lr_paths": \{$}}
 # JSON-NEXT: {{^        "bb16:LR_W:\$x10": \{$}}
-# JSON-NEXT: {{^          "isBackward": false,$}}
 # JSON-NEXT: {{^          "terminating_paths": \{$}}
 # JSON-NEXT: {{^            "16 -> 17": \{$}}
 # JSON-NEXT: {{^              "cause": "SC Match",$}}
@@ -925,7 +924,6 @@
 # JSON-NEXT: {{^          \}$}}
 # JSON-NEXT: {{^        \},$}}
 # JSON-NEXT: {{^        "bb19:LR_W:\$x10": \{$}}
-# JSON-NEXT: {{^          "isBackward": false,$}}
 # JSON-NEXT: {{^          "terminating_paths": \{$}}
 # JSON-NEXT: {{^            "19 -> 20": \{$}}
 # JSON-NEXT: {{^              "cause": "SC Match",$}}

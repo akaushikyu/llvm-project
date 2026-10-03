@@ -478,9 +478,8 @@
 # JSON-NEXT:           }
 # JSON-NEXT:         }
 # JSON-NEXT:       ],
-# JSON-NEXT:       "lr_paths": {
+# JSON:       "lr_paths": {
 # JSON-NEXT:         "bb9:LR_W:$x10": {
-# JSON-NEXT:           "isBackward": false,
 # JSON-NEXT:           "terminating_paths": {
 # JSON-NEXT:             "9 -> 10": {
 # JSON-NEXT:               "cause": "SC Match",
