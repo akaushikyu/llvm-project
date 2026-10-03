@@ -63,7 +63,6 @@ namespace {
         // static Register getFreeReg(const MachineBasicBlock &MBB,
         //                         const MachineInstr &Br);
 
-        static MachineBasicBlock::iterator isBranchAfter(MachineInstr &MI);
         const RISCVInstrInfo *TII = nullptr;
           unsigned NumFunctions   = 0;
           unsigned NumLRs   = 0;
@@ -170,35 +169,7 @@ RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
   
 // }
 
-MachineBasicBlock::iterator RISCVInsertBNERDSC::isBranchAfter(MachineInstr &MI) {
-  MachineBasicBlock::iterator MBBI = MI.getIterator();
-  MachineBasicBlock::iterator E = MI.getParent()->end();
-  while(MBBI != E) {
-    switch (MBBI->getOpcode()) {
-      case RISCV::BEQ:
-      case RISCV::BNE:
-      case RISCV::BLT:
-      case RISCV::BGE:
-      case RISCV::BLTU:
-      case RISCV::BGEU:
-        return MBBI;
-      case RISCV::SC_W:
-      case RISCV::SC_D:
-      case RISCV::SC_D_AQ:
-      case RISCV::SC_W_AQ:
-      case RISCV::SC_D_RL:
-      case RISCV::SC_W_RL:
-      case RISCV::SC_D_AQRL:
-      case RISCV::SC_W_AQRL:
-        return E;
-      default:
-        break;
-        
-    }
-    MBBI++;
-  }
-  return E;
-}
+
 // ===========================================================================
 // Pass entry point
 // ===========================================================================
@@ -268,7 +239,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
         seenLRMBBs.insert(&MBB);
         continue;
       }
-      MachineBasicBlock::iterator BrI= isBranchAfter(*MBBI);
+      MachineBasicBlock::iterator BrI= lrsc::isBranchAfter(*MBBI);
       
       if(BrI==E){
         seenLRMBBs.insert(&MBB);
@@ -318,7 +289,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
               << "\n";
       });
       
-      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR, RPOIndex)) {
+      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR)) {
         LLVM_DEBUG(dbgs() << "=== Unconditional" << " ===\n");
         seenLRMBBs.insert(&MBB);
         continue;
