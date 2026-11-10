@@ -70,8 +70,8 @@ void initializeRISCVFoldMemOffsetPass(PassRegistry &);
 FunctionPass *createRISCVMergeBaseOffsetOptPass();
 void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
 
-FunctionPass *createRISCVPseudoBNEBranchExpansionPass();
-void initializeRISCVPseudoBNEBranchExpansionPass(PassRegistry &);
+// FunctionPass *createRISCVPseudoBNEBranchExpansionPass();
+// void initializeRISCVPseudoBNEBranchExpansionPass(PassRegistry &);
 
 FunctionPass *createRISCVExpandPseudoPass();
 void initializeRISCVExpandPseudoPass(PassRegistry &);
@@ -141,8 +141,8 @@ void initializeRISCVCountLRSCPass(PassRegistry &);
 FunctionPass *createRISCVExpandINLINEASMPass();
 void initializeRISCVExpandINLINEASMPass(PassRegistry &);
 
-FunctionPass *createRISCVInsertBNERDSCPass();
-void initializeRISCVInsertBNERDSCPass(PassRegistry &);
+FunctionPass *createRISCVInsertDummySCPass();
+void initializeRISCVInsertDummySCPass(PassRegistry &);
 
 void initializeRISCVAsmPrinterPass(PassRegistry &);
 } // namespace llvm

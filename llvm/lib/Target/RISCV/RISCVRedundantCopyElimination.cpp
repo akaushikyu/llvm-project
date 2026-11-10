@@ -73,12 +73,12 @@ static bool
 guaranteesZeroRegInBlock(MachineBasicBlock &MBB,
                          const SmallVectorImpl<MachineOperand> &Cond,
                          MachineBasicBlock *TBB) {
-  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
-    assert(Cond.size() == 4 && "Unexpected number of operands");
-  else
+  // if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+  //   assert(Cond.size() == 4 && "Unexpected number of operands");
+  // else
     assert(Cond.size() == 3 && "Unexpected number of operands");
   assert(TBB != nullptr && "Expected branch target basic block");
   auto Opc = Cond[0].getImm();
@@ -95,12 +95,12 @@ static bool
 guaranteesRegEqualsImmInBlock(MachineBasicBlock &MBB,
                               const SmallVectorImpl<MachineOperand> &Cond,
                               MachineBasicBlock *TBB) {
-  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
-    assert(Cond.size() == 4 && "Unexpected number of operands");
-  else
+  // if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+  //   assert(Cond.size() == 4 && "Unexpected number of operands");
+  // else
     assert(Cond.size() == 3 && "Unexpected number of operands");
   assert(TBB != nullptr && "Expected branch target basic block");
   auto Opc = Cond[0].getImm();

@@ -52,10 +52,10 @@ static cl::opt<bool> DumpLRSCMachineCFG(
     cl::Hidden,
     cl::desc("Dump machine CFG after LR/SC inline-asm expansion and counting"),
     cl::init(false));
-static cl::opt<bool> RunBnerd(
-    "riscv-run-bnerd",
+static cl::opt<bool> RunDummySC(
+    "riscv-run-dummy-sc",
     cl::Hidden,
-    cl::desc("Run Bnerd pass"),
+    cl::desc("Run Dummy SC pass"),
     cl::init(false));
 // FIXME: Unify control over GlobalMerge.
 static cl::opt<cl::boolOrDefault>
@@ -139,7 +139,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVOptWInstrsPass(*PR);
   initializeRISCVFoldMemOffsetPass(*PR);
   initializeRISCVPreRAExpandPseudoPass(*PR);
-  initializeRISCVPseudoBNEBranchExpansionPass(*PR);
+  // initializeRISCVPseudoBNEBranchExpansionPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVVectorPeepholePass(*PR);
   initializeRISCVVLOptimizerPass(*PR);
@@ -159,7 +159,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVPromoteConstantPass(*PR);
   initializeRISCVExpandINLINEASMPass(*PR);
   initializeRISCVCountLRSCPass(*PR);
-  initializeRISCVInsertBNERDSCPass(*PR);
+  initializeRISCVInsertDummySCPass(*PR);
 }
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
@@ -609,14 +609,14 @@ void RISCVPassConfig::addPreEmitPass2() {
 
   
   // Expand PseudoBNE branches to a canonical form .
-  addPass(createRISCVPseudoBNEBranchExpansionPass());
+  // addPass(createRISCVPseudoBNEBranchExpansionPass());
 
   // Add pass to count LR/SC instruction pairs
   addPass(createRISCVCountLRSCPass());
 
-  // Add pass to insert bnerd + dummy sc
-  if (RunBnerd) {
-    addPass(createRISCVInsertBNERDSCPass());
+  // Add pass to insert dummy sc
+  if (RunDummySC) {
+    addPass(createRISCVInsertDummySCPass());
   }
   // Add pass to make .dot files of mcfg
   if (DumpLRSCMachineCFG) {

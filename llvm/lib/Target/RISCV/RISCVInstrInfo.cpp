@@ -1046,11 +1046,11 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   default:
     return RISCVCC::COND_INVALID;
   case RISCV::BEQ:
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
-#else
-  case RISCV::BEQRD:
-#endif
+// #else
+//   case RISCV::BEQRD:
+// #endif
   case RISCV::CV_BEQIMM:
   case RISCV::QC_BEQI:
   case RISCV::QC_E_BEQI:
@@ -1058,11 +1058,11 @@ RISCVCC::CondCode RISCVInstrInfo::getCondFromBranchOpc(unsigned Opc) {
   case RISCV::NDS_BEQC:
     return RISCVCC::COND_EQ;
   case RISCV::BNE:
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BNEI:
-#else
-  case RISCV::BNERD:
-#endif
+// #else
+//   case RISCV::BNERD:
+// #endif
   case RISCV::QC_BNEI:
   case RISCV::QC_E_BNEI:
   case RISCV::CV_BNEIMM:
@@ -1116,25 +1116,25 @@ static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
   // Block ends with fall-through condbranch.
   assert(LastInst.getDesc().isConditionalBranch() &&
          "Unknown conditional branch");
-#ifdef BNERD_FEATURE_DISABLED
-#else
+// #ifdef BNERD_FEATURE_DISABLED
+// #else
 
-  if (LastInst.getOpcode() == RISCV::PseudoBEQUsingBNE 
-      || LastInst.getOpcode() == RISCV::PseudoBLTUsingBNE
-      || LastInst.getOpcode() == RISCV::PseudoBGEUsingBNE
-      || LastInst.getOpcode() == RISCV::PseudoBLTUUsingBNE
-      || LastInst.getOpcode() == RISCV::PseudoBGEUUsingBNE
-      || LastInst.getOpcode() == RISCV::BNERD || LastInst.getOpcode() == RISCV::BEQRD) {
+//   if (LastInst.getOpcode() == RISCV::PseudoBEQUsingBNE 
+//       || LastInst.getOpcode() == RISCV::PseudoBLTUsingBNE
+//       || LastInst.getOpcode() == RISCV::PseudoBGEUsingBNE
+//       || LastInst.getOpcode() == RISCV::PseudoBLTUUsingBNE
+//       || LastInst.getOpcode() == RISCV::PseudoBGEUUsingBNE
+//       || LastInst.getOpcode() == RISCV::BNERD || LastInst.getOpcode() == RISCV::BEQRD) {
 
-    Target = LastInst.getOperand(3).getMBB();
-    Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
-    Cond.push_back(LastInst.getOperand(0));  // rd
-    Cond.push_back(LastInst.getOperand(1));  // rs1
-    Cond.push_back(LastInst.getOperand(2));  // rs2
-    // operand 2 (rd) is not part of the condition and it's the embedded reg
-    return;
-  }
-#endif
+//     Target = LastInst.getOperand(3).getMBB();
+//     Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
+//     Cond.push_back(LastInst.getOperand(0));  // rd
+//     Cond.push_back(LastInst.getOperand(1));  // rs1
+//     Cond.push_back(LastInst.getOperand(2));  // rs2
+//     // operand 2 (rd) is not part of the condition and it's the embedded reg
+//     return;
+//   }
+// #endif
 
   Target = LastInst.getOperand(2).getMBB();
   Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
@@ -1193,7 +1193,7 @@ unsigned RISCVCC::getBrCond(RISCVCC::CondCode CC, unsigned SelectOpc) {
       return RISCV::BGEU;
     }
     break;
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::Select_GPR_Using_CC_Imm5_Zibi:
     switch (CC) {
     default:
@@ -1204,7 +1204,7 @@ unsigned RISCVCC::getBrCond(RISCVCC::CondCode CC, unsigned SelectOpc) {
       return RISCV::BNEI;
     }
     break;
-#endif
+// #endif
   case RISCV::Select_GPR_Using_CC_SImm5_CV:
     switch (CC) {
     default:
@@ -1419,13 +1419,13 @@ unsigned RISCVInstrInfo::insertBranch(
   // Shouldn't be a fall through.
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
   if (!Cond.empty()) {
-    if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE  ||
-        Cond[0].getImm() == RISCV::PseudoBLTUsingBNE  ||
-        Cond[0].getImm() == RISCV::PseudoBGEUsingBNE  ||
-        Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE ||
-        Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
-      assert(Cond.size() == 4 && "RISC-V custom branch conditions have three components!");
-    else
+  //   if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE  ||
+  //       Cond[0].getImm() == RISCV::PseudoBLTUsingBNE  ||
+  //       Cond[0].getImm() == RISCV::PseudoBGEUsingBNE  ||
+  //       Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE ||
+  //       Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+  //     assert(Cond.size() == 4 && "RISC-V custom branch conditions have three components!");
+  //   else
       assert(Cond.size() == 3 && "RISC-V branch conditions have two components!");
   }
 
@@ -1436,26 +1436,26 @@ unsigned RISCVInstrInfo::insertBranch(
       *BytesAdded += getInstSizeInBytes(MI);
     return 1;
   }
-  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE) {
+  // if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE) {
 
-    MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm())).add(Cond[1]).add(Cond[2]).add(Cond[3]).addMBB(TBB);
+  //   MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm())).add(Cond[1]).add(Cond[2]).add(Cond[3]).addMBB(TBB);
 
-    if (BytesAdded)
-      *BytesAdded += getInstSizeInBytes(CondMI);
+  //   if (BytesAdded)
+  //     *BytesAdded += getInstSizeInBytes(CondMI);
 
-    if (!FBB)
-      return 1;
+  //   if (!FBB)
+  //     return 1;
 
-    MachineInstr &UncondMI = *BuildMI(&MBB, DL, get(RISCV::PseudoBR)).addMBB(FBB);
+  //   MachineInstr &UncondMI = *BuildMI(&MBB, DL, get(RISCV::PseudoBR)).addMBB(FBB);
 
-    if (BytesAdded)
-      *BytesAdded += getInstSizeInBytes(UncondMI);
+  //   if (BytesAdded)
+  //     *BytesAdded += getInstSizeInBytes(UncondMI);
 
-    return 2;
-  }
+  //   return 2;
+  // }
   // Either a one or two-way conditional branch.
   MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm()))
                               .add(Cond[1])
@@ -1548,12 +1548,12 @@ void RISCVInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
 
 bool RISCVInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
-      || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
-    assert(Cond.size() == 4 && "Invalid branch condition!");
-  else
+  // if (Cond[0].getImm() == RISCV::PseudoBEQUsingBNE || Cond[0].getImm() == RISCV::PseudoBLTUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBLTUUsingBNE
+  //     || Cond[0].getImm() == RISCV::PseudoBGEUUsingBNE)
+  //   assert(Cond.size() == 4 && "Invalid branch condition!");
+  // else
     assert(Cond.size() == 3 && "Invalid branch condition!");
   switch (Cond[0].getImm()) {
   default:
@@ -1561,29 +1561,29 @@ bool RISCVInstrInfo::reverseBranchCondition(
   case RISCV::BEQ:
     Cond[0].setImm(RISCV::BNE);
     break;
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
     Cond[0].setImm(RISCV::BNEI);
     break;
-#endif
+// #endif
   case RISCV::BNE:
     Cond[0].setImm(RISCV::BEQ);
     break;
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BNEI:
     Cond[0].setImm(RISCV::BEQI);
     break;
-#else
-  case RISCV::PseudoBEQUsingBNE:
-  case RISCV::PseudoBLTUsingBNE:
-  case RISCV::PseudoBGEUsingBNE:
-  case RISCV::PseudoBLTUUsingBNE:
-  case RISCV::PseudoBGEUUsingBNE:
-  case RISCV::BEQRD:
-  case RISCV::BNERD:
+// #else
+  // case RISCV::PseudoBEQUsingBNE:
+  // case RISCV::PseudoBLTUsingBNE:
+  // case RISCV::PseudoBGEUsingBNE:
+  // case RISCV::PseudoBLTUUsingBNE:
+  // case RISCV::PseudoBGEUUsingBNE:
+  // case RISCV::BEQRD:
+  // case RISCV::BNERD:
     // BNERD and BEQRD have no inverse form
-    return true;  // returning true shows "unable to reverse"
-#endif
+    // return true;  // returning true shows "unable to reverse"
+// #endif
   case RISCV::BLT:
     Cond[0].setImm(RISCV::BGE);
     break;
@@ -1827,20 +1827,20 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   case RISCV::NDS_BEQC:
   case RISCV::NDS_BNEC:
     return isInt<11>(BrOffset);
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
   case RISCV::BEQI:
   case RISCV::BNEI:
-#else
-  case RISCV::BEQRD:
-  case RISCV::BNERD:
-    return isInt<8>(BrOffset);
-  case RISCV::PseudoBEQUsingBNE:
-  case RISCV::PseudoBLTUsingBNE:
-  case RISCV::PseudoBGEUsingBNE:
-  case RISCV::PseudoBLTUUsingBNE:
-  case RISCV::PseudoBGEUUsingBNE:
-    return isInt<13>(BrOffset);
-#endif
+// #else
+  // case RISCV::BEQRD:
+  // case RISCV::BNERD:
+  //   return isInt<8>(BrOffset);
+  // case RISCV::PseudoBEQUsingBNE:
+  // case RISCV::PseudoBLTUsingBNE:
+  // case RISCV::PseudoBGEUsingBNE:
+  // case RISCV::PseudoBLTUUsingBNE:
+  // case RISCV::PseudoBGEUUsingBNE:
+  //   return isInt<13>(BrOffset);
+// #endif
   case RISCV::BEQ:
   case RISCV::BNE:
   case RISCV::BLT:

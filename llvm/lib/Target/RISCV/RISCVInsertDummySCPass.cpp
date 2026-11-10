@@ -1,4 +1,4 @@
-//===-- RISCVInsertBNERDSC.cpp - Insert BNERD branch and an SC after LR to clear the reservation -----------===//
+//===-- RISCVInsertDummySCPass.cpp - Insert dummy SC after LR to clear the reservation -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,8 +8,7 @@
 //
 // This pass detects every LR (load-reserved) instruction immediately followed
 // by a conditional branch, picks a register that is unused in the branch's
-// non-SC successor, rewrites the branch as a custom BNERD form (func3=0x3,
-// imm[11:7] repurposed as a 5-bit register field), and inserts a "bridge"
+// non-SC successor, inserts a "bridge"
 // MachineBasicBlock that issues a no-op SC using the chosen free register
 // before falling through to the original successor.
 //
@@ -17,8 +16,8 @@
 
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
 #include "llvm/ADT/Statistic.h"
-#define RISCV_INSERT_BNERD_SC_NAME "RISC-V insert bnerd sc"
-#define DEBUG_TYPE "riscv-insert-bnerd-sc"
+#define RISCV_INSERT_DUMMY_SC_NAME "RISC-V insert dummy sc"
+#define DEBUG_TYPE "riscv-insert-dummy-sc"
 
 #include "LRSCCountUtils.hpp"
 #include "RISCV.h"
@@ -39,26 +38,26 @@
 using namespace llvm;
 using namespace utils;
 
-static cl::opt<bool> EnableRISCVBNERDSCInsertion(
-    "bnerd-stats", cl::Hidden,
+static cl::opt<bool> EnableRISCVDummySCInsertion(
+    "dummy-sc-stats", cl::Hidden,
     cl::desc(
-        "Insert a BNERD branch and an SC after each LR-then-branch pair to clear the reservation. "),
+        "Insert a dummy SC after each LR-then-branch pair to clear the reservation. "),
     cl::init(false));
 
 namespace {
 
-  class RISCVInsertBNERDSC : public MachineFunctionPass {
+  class RISCVInsertDummySC : public MachineFunctionPass {
     public:
         static char ID;
     
-        RISCVInsertBNERDSC() : MachineFunctionPass(ID) {}
-        ~RISCVInsertBNERDSC();
+        RISCVInsertDummySC() : MachineFunctionPass(ID) {}
+        ~RISCVInsertDummySC();
         bool runOnMachineFunction(MachineFunction &MF) override;
         void getAnalysisUsage(AnalysisUsage &AU) const override {
           AU.addRequired<MachinePostDominatorTreeWrapperPass>();
           MachineFunctionPass::getAnalysisUsage(AU);
         }
-        StringRef getPassName() const override { return RISCV_INSERT_BNERD_SC_NAME; }
+        StringRef getPassName() const override { return RISCV_INSERT_DUMMY_SC_NAME; }
     private:
         // static Register getFreeReg(const MachineBasicBlock &MBB,
         //                         const MachineInstr &Br);
@@ -70,12 +69,12 @@ namespace {
 
 } // end anonymous namespace
 
-char RISCVInsertBNERDSC::ID = 0;
-INITIALIZE_PASS(RISCVInsertBNERDSC, "riscv-insert-bnerd-sc", RISCV_INSERT_BNERD_SC_NAME, false, false)
-FunctionPass *llvm::createRISCVInsertBNERDSCPass() { return new RISCVInsertBNERDSC(); }
-RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
-  if (EnableRISCVBNERDSCInsertion) {
-    dbgs() << "=== RISCVInsertBNERDSC Stats ===\n";
+char RISCVInsertDummySC::ID = 0;
+INITIALIZE_PASS(RISCVInsertDummySC, "riscv-insert-dummy-sc", RISCV_INSERT_DUMMY_SC_NAME, false, false)
+FunctionPass *llvm::createRISCVInsertDummySCPass() { return new RISCVInsertDummySC(); }
+RISCVInsertDummySC::~RISCVInsertDummySC() {
+  if (EnableRISCVDummySCInsertion) {
+    dbgs() << "=== RISCVInsertDummySCPass Stats ===\n";
     dbgs() << "  Functions processed : " << NumFunctions << "\n";
     dbgs() << "  LR/Br pairs found   : " << NumLRs << "\n";
     dbgs() << "================================\n";
@@ -84,7 +83,7 @@ RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
 
 
 
-// Register RISCVInsertBNERDSC::getFreeReg(const MachineBasicBlock &MBB,
+// Register RISCVInsertDummySCPass::getFreeReg(const MachineBasicBlock &MBB,
 //                                 const MachineInstr &Br) {
 //   SmallSet<Register, 32> UsedRegs;
 //   Register FreeReg;
@@ -173,7 +172,7 @@ RISCVInsertBNERDSC::~RISCVInsertBNERDSC() {
 // ===========================================================================
 // Pass entry point
 // ===========================================================================
-bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
+bool RISCVInsertDummySC::runOnMachineFunction(MachineFunction &MF) {
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
   unsigned Index = 0;
@@ -268,23 +267,23 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
         });
       TargetMBB = exitSucc;
       LLVM_DEBUG({
-        dbgs() << "InsertBNERDSC: LR_MBB: "
+        dbgs() << "InsertDummySCPass: LR_MBB: "
               << (LR_MBB ? "bb." + Twine(LR_MBB->getNumber()) : Twine("null"))
               << "\n";
 
-        dbgs() << "InsertBNERDSC: TargetMBB: "
+        dbgs() << "InsertDummySCPass: TargetMBB: "
               << (TargetMBB ? "bb." + Twine(TargetMBB->getNumber()) : Twine("null"))
               << "\n";
 
-        dbgs() << "InsertBNERDSC: SCMBB: "
+        dbgs() << "InsertDummySCPass: SCMBB: "
               << (SCMBB ? "bb." + Twine(SCMBB->getNumber()) : Twine("null"))
               << "\n";
 
-        dbgs() << "InsertBNERDSC: SCReachSucc: "
+        dbgs() << "InsertDummySCPass: SCReachSucc: "
               << (SCReachSucc ? "bb." + Twine(SCReachSucc->getNumber()) : Twine("null"))
               << "\n";
 
-        dbgs() << "InsertBNERDSC: exitSucc: "
+        dbgs() << "InsertDummySCPass: exitSucc: "
               << (exitSucc ? "bb." + Twine(exitSucc->getNumber()) : Twine("null"))
               << "\n";
       });
@@ -301,7 +300,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       // Register FreeReg = getFreeReg(*TargetMBB, Br);
       Register FreeReg = RISCV::X0;
 
-      LLVM_DEBUG(dbgs() << "RISCVInsertBNERDSC: rewriting LR/Br in "
+      LLVM_DEBUG(dbgs() << "RISCVInsertDummySCPass: rewriting LR/Br in "
                   << MBB.getName()
                   << ", FreeReg=" << printReg(FreeReg) << "\n");
       
@@ -326,8 +325,7 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
       BuildMI(BridgeSCBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(TargetMBB);
       
 
-      BuildMI(*LR_MBB, Br, DL, TII->get(RISCV::BNERD))
-          .addReg(FreeReg, RegState::Define)   // encoded into imm[11:7]
+      BuildMI(*LR_MBB, Br, DL, TII->get(RISCV::BNE))
           .addReg(Rs1)
           .addReg(Rs2)
           .addMBB(BridgeSCBB) // retargeted below

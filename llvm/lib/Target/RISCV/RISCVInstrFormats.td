@@ -520,8 +520,8 @@ class RVInstB<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
   let Inst{7} = imm12{10};
   let Inst{6-0} = opcode.Value;
 }
-#ifdef BNERD_FEATURE_DISABLED
-#else
+// #ifdef BNERD_FEATURE_DISABLED
+// #else
 // B-type with rd field stealing imm[11:7].
 //
 // Rationale for this encoding:
@@ -551,45 +551,45 @@ class RVInstB<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
 //      so register-read paths and funct3 decoding need no modification --
 //      only the immediate-assembly mux and a new rd write-enable path are
 //      added.
-class RVInstBEQRD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
-              string opcodestr, string argstr>
-    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
-  bits<7> imm7;
-  bits<5>  rd;
-  bits<5> rs2;
-  bits<5> rs1;
+// class RVInstBEQRD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
+//               string opcodestr, string argstr>
+//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
+//   bits<7> imm7;
+//   bits<5>  rd;
+//   bits<5> rs2;
+//   bits<5> rs1;
 
-  let Inst{31} = imm7{6}; //imm13{12}
-  let Inst{30-27} = rd{3-0}; //imm13{10-7}
-  let Inst{26-25} = imm7{5-4}; //imm13{6-5}
-  let Inst{24-20} = rs2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-8} = imm7{3-0}; //imm13{4-1}
-  let Inst{7} = rd{4}; //imm13{11}
-  let Inst{6-0} = opcode.Value;
-}
+//   let Inst{31} = imm7{6}; //imm13{12}
+//   let Inst{30-27} = rd{3-0}; //imm13{10-7}
+//   let Inst{26-25} = imm7{5-4}; //imm13{6-5}
+//   let Inst{24-20} = rs2;
+//   let Inst{19-15} = rs1;
+//   let Inst{14-12} = funct3;
+//   let Inst{11-8} = imm7{3-0}; //imm13{4-1}
+//   let Inst{7} = rd{4}; //imm13{11}
+//   let Inst{6-0} = opcode.Value;
+// }
 
-// B-type with rd field stealing imm[11:7].
-class RVInstBNERD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
-              string opcodestr, string argstr>
-    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
-  bits<7> imm7;
-  bits<5>  rd;
-  bits<5> rs2;
-  bits<5> rs1;
+// // B-type with rd field stealing imm[11:7].
+// class RVInstBNERD<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
+//               string opcodestr, string argstr>
+//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatB> {
+//   bits<7> imm7;
+//   bits<5>  rd;
+//   bits<5> rs2;
+//   bits<5> rs1;
 
-  let Inst{31} = imm7{6}; //imm13{12}
-  let Inst{30-27} = rd{3-0}; //imm13{10-7}
-  let Inst{26-25} = imm7{5-4}; //imm13{6-5}
-  let Inst{24-20} = rs2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-8} = imm7{3-0}; //imm13{4-1}
-  let Inst{7} = rd{4}; //imm13{11}
-  let Inst{6-0} = opcode.Value;
-}
-#endif
+//   let Inst{31} = imm7{6}; //imm13{12}
+//   let Inst{30-27} = rd{3-0}; //imm13{10-7}
+//   let Inst{26-25} = imm7{5-4}; //imm13{6-5}
+//   let Inst{24-20} = rs2;
+//   let Inst{19-15} = rs1;
+//   let Inst{14-12} = funct3;
+//   let Inst{11-8} = imm7{3-0}; //imm13{4-1}
+//   let Inst{7} = rd{4}; //imm13{11}
+//   let Inst{6-0} = opcode.Value;
+// }
+// #endif
 
 
 class RVInstBIMM<bits<3> funct3, RISCVOpcode opcode, dag outs, dag ins,
