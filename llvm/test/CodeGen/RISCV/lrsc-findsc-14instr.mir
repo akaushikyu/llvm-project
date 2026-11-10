@@ -1,7 +1,7 @@
 # RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,+bnerd,-zaamo \
 # RUN:   -riscv-run-bnerd \
 # RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-bnerd-sc \
-# RUN:   -debug-only=riscvcntlrsc \
+# RUN:   -debug-only=riscv-lrsc-count \
 # RUN:   -dump-insn-stats-json \
 # RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=DEBUG

@@ -891,66 +891,117 @@ inline bool isSCMBB(const MachineBasicBlock &MBB) {
 }
 /*--------------------------------------------------------------------------*/
 /* findSCMBBDFS: Does a DFS on the successors of a Machine Basic Block(MBB) and sees if any MBB contains an SC instruction */
-inline MachineBasicBlock *findSCMBBDFS(MachineBasicBlock *MBB,
-                                SmallPtrSetImpl<MachineBasicBlock *> &Visited, unsigned depth) {
-  if (depth == 0) {
-    return nullptr;
-  }
-  if (!Visited.insert(MBB).second){
-    return nullptr;
-  }  
-  if(isSCMBB(*MBB)){
-    return MBB;
-  }
-  for (MachineBasicBlock *Succ : MBB->successors()) {
+// inline MachineBasicBlock *findSCMBBDFS(MachineBasicBlock *MBB,
+//                                 SmallPtrSetImpl<MachineBasicBlock *> &Visited, unsigned depth) {
+//   if (depth == 0) {
+//     return nullptr;
+//   }
+//   if (!Visited.insert(MBB).second){
+//     return nullptr;
+//   }  
+//   if(isSCMBB(*MBB)){
+//     return MBB;
+//   }
+//   for (MachineBasicBlock *Succ : MBB->successors()) {
 
-    if (isLRMBB(*Succ)) {
-      continue;
-    }
+//     if (isLRMBB(*Succ)) {
+//       continue;
+//     }
       
-    if (isSCMBB(*Succ)){
-      return Succ;
-    }
+//     if (isSCMBB(*Succ)){
+//       return Succ;
+//     }
 
 
-    if (MachineBasicBlock *SCMBB = findSCMBBDFS(Succ, Visited, depth - 1)){
-      return SCMBB;
-    }
+//     if (MachineBasicBlock *SCMBB = findSCMBBDFS(Succ, Visited, depth - 1)){
+//       return SCMBB;
+//     }
       
-  }
-  Visited.erase(MBB);
-  return nullptr;
-}
+//   }
+//   Visited.erase(MBB);
+//   return nullptr;
+// }
+// /*--------------------------------------------------------------------------*/
+// /* isConstrainedRetryLR:  */
+// inline bool isConstrainedRetryLR( MachineBasicBlock *LRMBB,
+//                                   MachineBasicBlock *SCMBB, 
+//                                   MachineBasicBlock *MBB,
+//                                   SmallPtrSetImpl<MachineBasicBlock *> &Visited,
+//                                   unsigned depth) {
+//   if (depth == 0) {
+//     return false;
+//   }
+//   if (!Visited.insert(MBB).second){
+//     return false;
+//   }  
+//   if(isSCMBB(*MBB)){
+//     return false;
+//   }
+//   for (MachineBasicBlock *Succ : MBB->successors()) {
+
+//     if (Succ==SCMBB) {
+//       continue;
+//     }
+      
+//     if (Succ==LRMBB){
+//       return true;
+//     }
+//         if(isLRMBB(*Succ)) {
+//       continue;
+//     }
+//     if (isConstrainedRetryLR(LRMBB, SCMBB, Succ, Visited, depth - 1)){
+//       return true;
+//     }
+//   }
+//   Visited.erase(MBB);
+//   return false;
+// }
 /*--------------------------------------------------------------------------*/
-/* isConstrainedRetryLR:  */
-inline bool isConstrainedRetryLR( MachineBasicBlock *LRMBB,
-                                  MachineBasicBlock *SCMBB, 
-                                  MachineBasicBlock *MBB,
-                                  SmallPtrSetImpl<MachineBasicBlock *> &Visited,
-                                  unsigned depth) {
-  if (depth == 0) {
-    return false;
-  }
-  if (!Visited.insert(MBB).second){
-    return false;
-  }  
-  if(isSCMBB(*MBB)){
-    return false;
-  }
-  for (MachineBasicBlock *Succ : MBB->successors()) {
-
-    if (Succ==SCMBB) {
-      continue;
-    }
-      
-    if (Succ==LRMBB){
-      return true;
-    }
-    return isConstrainedRetryLR(LRMBB, SCMBB, Succ, Visited, depth - 1); 
-  }
-  Visited.erase(MBB);
-  return false;
-}
+/* findSCAndLRRetry
+<isLRRetry, SCMBB, SCReachSucc, exitSucc>
+*/
+inline void findSCAndLRRetry(MachineBasicBlock *LRMBB,
+                            MachineBasicBlock *StartMBB,
+                            SmallPtrSet<MachineBasicBlock *, 32> Visited,
+                            std::tuple<bool, MachineBasicBlock *, MachineBasicBlock *, MachineBasicBlock *> &Result,
+                            unsigned depth) {
+                              if(depth == 0) {
+                                return;
+                              }
+                              if(!Visited.insert(StartMBB).second) {
+                                return;
+                              }
+                              // Unconditional LR/SC
+                              if(isSCMBB(*LRMBB)) {
+                                Result = {false, StartMBB, nullptr, nullptr};
+                                return;
+                              }
+                              for(MachineBasicBlock *Succ : StartMBB->successors()) {
+                                if(Succ == LRMBB) {
+                                  std::get<0>(Result) = true;
+                                  continue;
+                                }
+                                if(isLRMBB(*Succ)) {
+                                  Visited.insert(Succ);
+                                  continue;
+                                }
+                                if(isSCMBB(*Succ)) {
+                                  Visited.insert(Succ);
+                                  std::get<1>(Result) = Succ;
+                                  for(MachineBasicBlock *OrigSucc : LRMBB->successors()) {
+                                    if((Visited.contains(OrigSucc)|| OrigSucc == Succ)&& OrigSucc!=LRMBB){
+                                      std::get<2>(Result) = OrigSucc;
+                                    }
+                                    else{
+                                      std::get<3>(Result) = OrigSucc;
+                                    }
+                                  }
+                                  continue;
+                                }
+                                findSCAndLRRetry(LRMBB, Succ, Visited, Result, depth - 1);
+                              }
+                              return;
+                            }
 /*--------------------------------------------------------------------------*/
 /* isBackwardBranch: Checks if TargetMBB is reached as a result of a backward branch */
 inline bool isBackwardBranch(MachineBasicBlock *CurrMBB, MachineBasicBlock *TargetMBB, 
@@ -981,6 +1032,7 @@ inline bool isConditionalLRSC(MachineBasicBlock *LR_MBB,
                               MachineBasicBlock *SCMBB,
                               MachineBasicBlock *TargetMBB,
                               MachinePostDominatorTree &MPDT,
+                              bool isLRRetry,
                               const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex){
   if (!SCMBB) {
     return false;
@@ -990,18 +1042,16 @@ inline bool isConditionalLRSC(MachineBasicBlock *LR_MBB,
   }
   else {
     if (!isBackwardBranch(LR_MBB, TargetMBB, RPOIndex)) {
-      SmallPtrSet<MachineBasicBlock *, 16> Visited;
-      if (MPDT.dominates(SCMBB,LR_MBB) && !isConstrainedRetryLR(LR_MBB, SCMBB, LR_MBB, Visited , 15)) {
+      if (MPDT.dominates(SCMBB,LR_MBB) && !isLRRetry ) {
         return false;
       }
       else {
         return true;
       }
     }
-    else {
+    else{
       return false;
-    }
-    
+    } 
   }
 }
 

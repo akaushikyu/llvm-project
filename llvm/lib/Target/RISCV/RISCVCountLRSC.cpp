@@ -13,7 +13,7 @@
 
 #include "llvm/Support/Debug.h"
 #define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
-#define DEBUG_TYPE "riscvcntlrsc"
+#define DEBUG_TYPE "riscv-lrsc-count"
 
 
 #include "LRSCCountUtils.hpp"
@@ -215,20 +215,9 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
   MachineBasicBlock *LR_MBB = &MBB;
-
   MachineBasicBlock *TargetMBB = nullptr;
-  MachineBasicBlock *FalseMBB = nullptr;
-  SmallVector<MachineOperand, 4> Cond;
 
   const TargetInstrInfo *TII = MBB.getParent()->getSubtarget().getInstrInfo();
-
-  if (!TII->analyzeBranch(MBB, TargetMBB, FalseMBB, Cond)) {
-    FalseMBB = FalseMBB ? FalseMBB : MBB.getFallThrough();
-  }
-
-  
-
-
 
   /* Iterate over each instruction in the basic block, classify its opcode
    * against all LR/SC instruction flavours, and update the per-flavour
@@ -250,8 +239,42 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
       case RISCV::LR_W_RL:
       case RISCV::LR_D_AQRL:
       case RISCV::LR_W_AQRL:{
-        SmallPtrSet<MachineBasicBlock *, 16> Visited;
-        MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
+        SmallPtrSet<MachineBasicBlock *, 32> Visited;
+        std::tuple<bool, MachineBasicBlock *, MachineBasicBlock *, MachineBasicBlock *> Result = {false, nullptr, nullptr, nullptr};
+        /* Detecting the retry path for LR, and detecting SCMBB, 
+         the immediate successor of LR_MBB that reaches SCMBB, 
+         and the exit successor of LR_MBB that does not reach SCMBB (retries LR or exits the LR/SC sequence). */
+         
+        lrsc::findSCAndLRRetry(LR_MBB, &MBB, Visited, Result, 15);
+        auto [isRetryLR, SCMBB, SCReachSucc, exitSucc] = Result;
+        LLVM_DEBUG({
+          dbgs() << "isRetryLR = " << isRetryLR << "\n";
+          dbgs() << "SCMBB ptr = " << (void *)SCMBB << "\n";
+          dbgs() << "SCReachSucc ptr = " << (void *)SCReachSucc << "\n";
+          dbgs() << "exitSucc ptr = " << (void *)exitSucc << "\n";
+        });
+        TargetMBB = exitSucc;
+        LLVM_DEBUG({
+        dbgs() << "CountLRSC: LR_MBB: "
+                << (LR_MBB ? "bb." + Twine(LR_MBB->getNumber()) : Twine("null"))
+                << "\n";
+
+        dbgs() << "CountLRSC: TargetMBB: "
+                << (TargetMBB ? "bb." + Twine(TargetMBB->getNumber()) : Twine("null"))
+                << "\n";
+
+        dbgs() << "CountLRSC: SCMBB: "
+                << (SCMBB ? "bb." + Twine(SCMBB->getNumber()) : Twine("null"))
+                << "\n";
+
+        dbgs() << "CountLRSC: SCReachSucc: "
+                << (SCReachSucc ? "bb." + Twine(SCReachSucc->getNumber()) : Twine("null"))
+                << "\n";
+
+        dbgs() << "CountLRSC: exitSucc: "
+                << (exitSucc ? "bb." + Twine(exitSucc->getNumber()) : Twine("null"))
+                << "\n";
+        });
         MachineFunction &MF = *MBB.getParent();
         LLVM_DEBUG({
           if (SCMBB)
@@ -264,7 +287,7 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
         if (LR_MBB != SCMBB){
           Counts.setLRBackward(lrsc::isBackwardBranch(LR_MBB, TargetMBB, RPOIndex));
         }
-        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, RPOIndex)) {
+        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR, RPOIndex)) {
 
           Counts.updateBBLoopSeqFlavCnt(MBB, true);
           

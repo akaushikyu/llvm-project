@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=riscv64 -mattr=+a -O2 -debug-only=riscvcntlrsc \
+; RUN: llc -mtriple=riscv64 -mattr=+a -O2 -debug-only=riscv-lrsc-count \
 ; RUN:   %s -o /dev/null 2>&1 | FileCheck %s
 ; REQUIRES: asserts
 

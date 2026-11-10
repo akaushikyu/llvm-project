@@ -278,19 +278,47 @@ bool RISCVInsertBNERDSC::runOnMachineFunction(MachineFunction &MF) {
 
       MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
       MachineBasicBlock *TargetMBB = nullptr;
-      MachineBasicBlock *FalseMBB = nullptr;
-      SmallVector<MachineOperand, 4> Cond;
 
       const TargetInstrInfo *TII = MBB.getParent()->getSubtarget().getInstrInfo();
 
-      if (!TII->analyzeBranch(MBB, TargetMBB, FalseMBB, Cond)) {
-        FalseMBB = FalseMBB ? FalseMBB : MBB.getFallThrough();
-      }
-
-      SmallPtrSet<MachineBasicBlock *, 16> Visited;
-      MachineBasicBlock *SCMBB = lrsc::findSCMBBDFS(&MBB, Visited, 15);
       MachineBasicBlock *LR_MBB = &MBB;
-      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, RPOIndex)) {
+      SmallPtrSet<MachineBasicBlock *, 32> Visited;
+      std::tuple<bool, MachineBasicBlock *, MachineBasicBlock *, MachineBasicBlock *> Result = {false, nullptr, nullptr, nullptr};
+      /* Detecting the retry path for LR, and detecting SCMBB, 
+        the immediate successor of LR_MBB that reaches SCMBB, 
+        and the exit successor of LR_MBB that does not reach SCMBB (retries LR or exits the LR/SC sequence). */
+      lrsc::findSCAndLRRetry(LR_MBB, LR_MBB, Visited, Result, 15);
+      auto [isRetryLR, SCMBB, SCReachSucc, exitSucc] = Result; 
+              LLVM_DEBUG({
+          dbgs() << "isRetryLR = " << isRetryLR << "\n";
+          dbgs() << "SCMBB ptr = " << (void *)SCMBB << "\n";
+          dbgs() << "SCReachSucc ptr = " << (void *)SCReachSucc << "\n";
+          dbgs() << "exitSucc ptr = " << (void *)exitSucc << "\n";
+        });
+      TargetMBB = exitSucc;
+      LLVM_DEBUG({
+        dbgs() << "InsertBNERDSC: LR_MBB: "
+              << (LR_MBB ? "bb." + Twine(LR_MBB->getNumber()) : Twine("null"))
+              << "\n";
+
+        dbgs() << "InsertBNERDSC: TargetMBB: "
+              << (TargetMBB ? "bb." + Twine(TargetMBB->getNumber()) : Twine("null"))
+              << "\n";
+
+        dbgs() << "InsertBNERDSC: SCMBB: "
+              << (SCMBB ? "bb." + Twine(SCMBB->getNumber()) : Twine("null"))
+              << "\n";
+
+        dbgs() << "InsertBNERDSC: SCReachSucc: "
+              << (SCReachSucc ? "bb." + Twine(SCReachSucc->getNumber()) : Twine("null"))
+              << "\n";
+
+        dbgs() << "InsertBNERDSC: exitSucc: "
+              << (exitSucc ? "bb." + Twine(exitSucc->getNumber()) : Twine("null"))
+              << "\n";
+      });
+      
+      if ( !lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR, RPOIndex)) {
         LLVM_DEBUG(dbgs() << "=== Unconditional" << " ===\n");
         seenLRMBBs.insert(&MBB);
         continue;
