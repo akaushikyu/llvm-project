@@ -1,14 +1,14 @@
-# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,+bnerd,-zaamo \
-# RUN:   -riscv-run-bnerd \
-# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-bnerd-sc \
+# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,-zaamo \
+# RUN:   -riscv-run-dummy-sc \
+# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-dummy-sc \
 # RUN:   -debug-only=riscv-lrsc-count \
 # RUN:   -dump-insn-stats-json \
 # RUN:   -verify-machineinstrs %s -o /dev/null 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=DEBUG
 #
-# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,+bnerd,-zaamo \
-# RUN:   -riscv-run-bnerd \
-# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-bnerd-sc \
+# RUN: llc -mtriple=riscv64-unknown-elf -mattr=+a,-zaamo \
+# RUN:   -riscv-run-dummy-sc \
+# RUN:   -run-pass=riscv-count-lr-sc,riscv-insert-dummy-sc \
 # RUN:   -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=MIR
 
@@ -143,6 +143,6 @@ body:             |
 # MIR-LABEL: name: lr_14_branches_to_sc
 # MIR: bb.0:
 # MIR: $x14 = LR_W $x10
-# MIR-NEXT: $x0 = BNERD $x12, $x13, %bb.16
+# MIR-NEXT: BNE $x12, $x13, %bb.16
 # MIR: bb.14:
 # MIR: $x15 = SC_W $x11, $x10
