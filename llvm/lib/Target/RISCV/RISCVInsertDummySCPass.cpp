@@ -325,7 +325,7 @@ bool RISCVInsertDummySC::runOnMachineFunction(MachineFunction &MF) {
       BuildMI(BridgeSCBB, DebugLoc(), TII->get(RISCV::PseudoBR)).addMBB(TargetMBB);
       
 
-      BuildMI(*LR_MBB, Br, DL, TII->get(RISCV::BNE))
+      BuildMI(*LR_MBB, Br, DL, TII->get(Br.getOpcode()))
           .addReg(Rs1)
           .addReg(Rs2)
           .addMBB(BridgeSCBB) // retargeted below
