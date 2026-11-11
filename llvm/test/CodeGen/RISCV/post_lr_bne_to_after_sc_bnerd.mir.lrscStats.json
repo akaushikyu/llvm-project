@@ -1,0 +1,159 @@
+{
+  "function": {
+    "post_lr_bne_to_after_sc": {
+      "basic_blocks": [
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 0,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 0,
+          "num_insn": 0,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 1,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 1,
+          "flavors": {
+            "LR_D": 1
+          },
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 1
+          },
+          "lrsc_count": 1,
+          "mbb_number": 1,
+          "num_insn": 2,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 2,
+          "flavors": {
+            "SC_D": 1
+          },
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 1,
+          "mbb_number": 2,
+          "num_insn": 2,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 3,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 3,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 4,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 4,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 5,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 5,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        }
+      ],
+      "lr_dead_regs": {
+        "bb1:LR_D:$x10": {
+          "dead_regs": [
+            "X0",
+            "X12",
+            "X13",
+            "X16",
+            "X17",
+            "X2",
+            "X28",
+            "X29",
+            "X3",
+            "X30",
+            "X31",
+            "X4",
+            "X5",
+            "X6",
+            "X7"
+          ],
+          "number_of_dead_regs": 15
+        }
+      },
+      "lr_paths": {
+        "bb1:LR_D:$x10": {
+          "terminating_paths": {
+            "1 -> 2": {
+              "cause": "SC Match",
+              "distance": 2,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LRSC",
+                  "num_instr": 6,
+                  "path": "1 -> 2 -> 1"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "1 -> 3 -> 4 -> 5": {
+              "cause": "RETURN",
+              "distance": 5,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LRSC",
+                  "num_instr": 6,
+                  "path": "1 -> 2 -> 1"
+                }
+              ],
+              "numberOfLoops": 0
+            }
+          }
+        }
+      },
+      "total_loop_seq_conditional_lrsc_occurrences": 1,
+      "total_loop_seq_unconditional_lrsc_occurrences": 0,
+      "total_lrsc_occurrences": 2
+    }
+  }
+}

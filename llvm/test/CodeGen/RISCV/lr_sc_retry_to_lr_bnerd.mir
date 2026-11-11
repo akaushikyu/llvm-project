@@ -1,7 +1,7 @@
 # RUN: llc \
 # RUN:   -mtriple=riscv64-linux-gnu \
-# RUN:   -mattr=+m,+a,+f,+d,+c,+bnerd,-zaamo \
-# RUN:   -riscv-run-bnerd \
+# RUN:   -mattr=+m,+a,+f,+d,+c,-zaamo \
+# RUN:   -riscv-run-dummy-sc \
 # RUN:   -verify-machineinstrs \
 # RUN:   -dump-insn-stats-json \
 # RUN:   -filetype=asm -asm-verbose=false %s -o - \
@@ -10,13 +10,13 @@
 # REQUIRES: riscv-registered-target
 
 --- |
-  define void @retry_to_lr_bnerd() {
+  define void @retry_to_lr() {
   entry:
     ret void
   }
 ...
 ---
-name: retry_to_lr_bnerd
+name: retry_to_lr
 tracksRegLiveness: true
 selected: true
 registers:
@@ -49,7 +49,7 @@ body: |
     PseudoRET
 ...
 
-# CHECK-LABEL: retry_to_lr_bnerd:
+# CHECK-LABEL: retry_to_lr:
 # CHECK:       lr.d
 # CHECK-NEXT:  bne
 # CHECK:       sc.d

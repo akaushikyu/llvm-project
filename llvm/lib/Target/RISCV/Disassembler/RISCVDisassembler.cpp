@@ -523,7 +523,7 @@ static DecodeStatus decodeUImmPlus1Operand(MCInst &Inst, uint32_t Imm,
   return MCDisassembler::Success;
 }
 
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
 static DecodeStatus decodeImmZibiOperand(MCInst &Inst, uint32_t Imm,
                                          int64_t Address,
                                          const MCDisassembler *Decoder) {
@@ -531,7 +531,7 @@ static DecodeStatus decodeImmZibiOperand(MCInst &Inst, uint32_t Imm,
   Inst.addOperand(MCOperand::createImm(Imm ? Imm : -1LL));
   return MCDisassembler::Success;
 }
-#endif
+// #endif
 
 template <unsigned N>
 static DecodeStatus decodeSImmOperand(MCInst &Inst, uint32_t Imm,

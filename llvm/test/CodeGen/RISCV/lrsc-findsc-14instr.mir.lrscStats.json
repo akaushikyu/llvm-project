@@ -1,0 +1,477 @@
+{
+  "function": {
+    "lr_14_branches_to_sc": {
+      "basic_blocks": [
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 1,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 0,
+          "flavors": {
+            "LR_W": 1
+          },
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 1
+          },
+          "lrsc_count": 1,
+          "mbb_number": 0,
+          "num_insn": 2,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 1,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 1,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 2,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 2,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 3,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 3,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 4,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 4,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 5,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 5,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 6,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 6,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 7,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 7,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 8,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 8,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 9,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 9,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 10,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 10,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 11,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 11,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 12,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 12,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 13,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 13,
+          "num_insn": 1,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 14,
+          "flavors": {
+            "SC_W": 1
+          },
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 1,
+          "mbb_number": 14,
+          "num_insn": 2,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        },
+        {
+          "bb_total_conditional_loop_seq_lrsc_occurrences": 0,
+          "bb_total_unconditional_loop_seq_lrsc_occurrences": 0,
+          "bb_traversal_index": 15,
+          "flavors": {},
+          "loop_seq_flavours": {
+            "conditional_loop_seq": 0
+          },
+          "lrsc_count": 0,
+          "mbb_number": 15,
+          "num_insn": 2,
+          "uncond_loop_seq_flavours": {
+            "unconditional_loop_seq": 0
+          }
+        }
+      ],
+      "lr_dead_regs": {
+        "bb0:LR_W:$x10": {
+          "dead_regs": [
+            "X0",
+            "X14",
+            "X15",
+            "X16",
+            "X17",
+            "X18",
+            "X19",
+            "X2",
+            "X20",
+            "X21",
+            "X22",
+            "X23",
+            "X24",
+            "X25",
+            "X26",
+            "X27",
+            "X28",
+            "X29",
+            "X3",
+            "X30",
+            "X31",
+            "X4",
+            "X5",
+            "X6",
+            "X7",
+            "X8",
+            "X9"
+          ],
+          "number_of_dead_regs": 27
+        }
+      },
+      "lr_paths": {
+        "bb0:LR_W:$x10": {
+          "terminating_paths": {
+            "0 -> 1 -> 14": {
+              "cause": "SC Match",
+              "distance": 3,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 14": {
+              "cause": "SC Match",
+              "distance": 4,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 14": {
+              "cause": "SC Match",
+              "distance": 5,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 14": {
+              "cause": "SC Match",
+              "distance": 6,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 14": {
+              "cause": "SC Match",
+              "distance": 7,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 14": {
+              "cause": "SC Match",
+              "distance": 8,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 14": {
+              "cause": "SC Match",
+              "distance": 9,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 14": {
+              "cause": "SC Match",
+              "distance": 10,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14": {
+              "cause": "SC Match",
+              "distance": 15,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 14": {
+              "cause": "SC Match",
+              "distance": 14,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 14": {
+              "cause": "SC Match",
+              "distance": 13,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 14": {
+              "cause": "SC Match",
+              "distance": 12,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 14": {
+              "cause": "SC Match",
+              "distance": 11,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            },
+            "0 -> 15 -> 0": {
+              "cause": "LR Self",
+              "distance": 5,
+              "hasLoop": false,
+              "loops": [
+                {
+                  "cycle_flavour": "LR",
+                  "num_instr": 6,
+                  "path": "0 -> 15 -> 0"
+                }
+              ],
+              "numberOfLoops": 0
+            }
+          }
+        }
+      },
+      "total_loop_seq_conditional_lrsc_occurrences": 1,
+      "total_loop_seq_unconditional_lrsc_occurrences": 0,
+      "total_lrsc_occurrences": 2
+    }
+  }
+}

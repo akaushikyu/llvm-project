@@ -32,7 +32,7 @@ add_public_tablegen_target(RISCVCommonTableGen)
 
 add_llvm_target(RISCVCodeGen
   RISCVAsmPrinter.cpp
-  RISCVPseudoBNEBranchExpansion.cpp
+
   RISCVCallingConv.cpp
   RISCVCodeGenPrepare.cpp
   RISCVConstantPoolValue.cpp
@@ -45,7 +45,7 @@ add_llvm_target(RISCVCodeGen
   RISCVFrameLowering.cpp
   RISCVGatherScatterLowering.cpp
   RISCVIndirectBranchTracking.cpp
-  RISCVInsertBNERDSC.cpp
+  RISCVInsertDummySCPass.cpp
   RISCVInsertReadWriteCSR.cpp
   RISCVInsertVSETVLI.cpp
   RISCVInsertWriteVXRM.cpp

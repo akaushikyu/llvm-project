@@ -289,36 +289,36 @@ class PseudoMaskedAMOUMinUMax
   let hasSideEffects = 0;
 }
 
-class PseudoMaskedBNEAMOMinMax
-    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
-             (ins GPR:$addr, GPR:$incr, GPR:$mask, GPR:$sextshamt, 
-                  ordering:$ordering), []> {
-  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
-                    "@earlyclobber $scratch2,"
-                    "@earlyclobber $scratch3";
-  let mayLoad = 1;
-  let mayStore = 1;
-  let hasSideEffects = 0;
-}
-class PseudoBNEAMOUMinUMax
-    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2),
-             (ins GPR:$addr, GPR:$incr, ordering:$ordering), []> {
-  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
-                    "@earlyclobber $scratch2";
-  let mayLoad = 1;
-  let mayStore = 1;
-  let hasSideEffects = 0;
-}
-class PseudoMaskedBNEAMOUMinUMax
-    : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
-             (ins GPR:$addr, GPR:$incr, GPR:$mask, ordering:$ordering), []> {
-  let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
-                    "@earlyclobber $scratch2,"
-                    "@earlyclobber $scratch3";
-  let mayLoad = 1;
-  let mayStore = 1;
-  let hasSideEffects = 0;
-}
+// class PseudoMaskedBNEAMOMinMax
+//     : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
+//              (ins GPR:$addr, GPR:$incr, GPR:$mask, GPR:$sextshamt, 
+//                   ordering:$ordering), []> {
+//   let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+//                     "@earlyclobber $scratch2,"
+//                     "@earlyclobber $scratch3";
+//   let mayLoad = 1;
+//   let mayStore = 1;
+//   let hasSideEffects = 0;
+// }
+// class PseudoBNEAMOUMinUMax
+//     : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2),
+//              (ins GPR:$addr, GPR:$incr, ordering:$ordering), []> {
+//   let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+//                     "@earlyclobber $scratch2";
+//   let mayLoad = 1;
+//   let mayStore = 1;
+//   let hasSideEffects = 0;
+// }
+// class PseudoMaskedBNEAMOUMinUMax
+//     : Pseudo<(outs GPR:$res, GPR:$scratch1, GPR:$scratch2, GPR:$scratch3),
+//              (ins GPR:$addr, GPR:$incr, GPR:$mask, ordering:$ordering), []> {
+//   let Constraints = "@earlyclobber $res,@earlyclobber $scratch1,"
+//                     "@earlyclobber $scratch2,"
+//                     "@earlyclobber $scratch3";
+//   let mayLoad = 1;
+//   let mayStore = 1;
+//   let hasSideEffects = 0;
+// }
 
 
 // Ordering constants must be kept in sync with the AtomicOrdering enum in
@@ -371,8 +371,9 @@ let Predicates = [HasStdExtZalrsc, NoStdExtZaamo] in {
 }
 
 // Normal 32-bit min/max expansion.
+//[NoBNERD, HasStdExtZalrsc, NoStdExtZaamo]
 let Predicates =
-    [NoBNERD, HasStdExtZalrsc, NoStdExtZaamo] in {
+    [HasStdExtZalrsc, NoStdExtZaamo] in {
   let Size = 24 in {
     def PseudoAtomicLoadMax32 : PseudoAMO;
     def PseudoAtomicLoadMin32 : PseudoAMO;
@@ -391,24 +392,25 @@ let Predicates =
 }
 
 // BNERD 32-bit min/max expansion.
-let Predicates =
-    [HasBNERD, HasStdExtZalrsc, NoStdExtZaamo] in {
-  let Size = 32 in {
-    def BNEPseudoAtomicLoadMax32 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadMin32 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadUMax32 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadUMin32 : PseudoBNEAMOUMinUMax;
-  }
+//[HasBNERD, HasStdExtZalrsc, NoStdExtZaamo]
+// let Predicates =
+//     [HasStdExtZalrsc, NoStdExtZaamo] in {
+//   // let Size = 32 in {
+//   //   def BNEPseudoAtomicLoadMax32 : PseudoBNEAMOUMinUMax;
+//   //   def BNEPseudoAtomicLoadMin32 : PseudoBNEAMOUMinUMax;
+//   //   def BNEPseudoAtomicLoadUMax32 : PseudoBNEAMOUMinUMax;
+//   //   def BNEPseudoAtomicLoadUMin32 : PseudoBNEAMOUMinUMax;
+//   // }
 
-  defm : PseudoAMOPat<"atomic_load_max_i32",
-                      BNEPseudoAtomicLoadMax32>;
-  defm : PseudoAMOPat<"atomic_load_min_i32",
-                      BNEPseudoAtomicLoadMin32>;
-  defm : PseudoAMOPat<"atomic_load_umax_i32",
-                      BNEPseudoAtomicLoadUMax32>;
-  defm : PseudoAMOPat<"atomic_load_umin_i32",
-                      BNEPseudoAtomicLoadUMin32>;
-}
+//   defm : PseudoAMOPat<"atomic_load_max_i32",
+//                       BNEPseudoAtomicLoadMax32>;
+//   defm : PseudoAMOPat<"atomic_load_min_i32",
+//                       BNEPseudoAtomicLoadMin32>;
+//   defm : PseudoAMOPat<"atomic_load_umax_i32",
+//                       BNEPseudoAtomicLoadUMax32>;
+//   defm : PseudoAMOPat<"atomic_load_umin_i32",
+//                       BNEPseudoAtomicLoadUMin32>;
+// }
 
 
 //===----------------------------------------------------------------------===//
@@ -447,8 +449,9 @@ let Predicates =
 }
 
 // Normal 64-bit min/max expansion.
+//[NoBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64] 
 let Predicates =
-    [NoBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+    [HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
   let Size = 24 in {
     def PseudoAtomicLoadMax64 : PseudoAMO;
     def PseudoAtomicLoadMin64 : PseudoAMO;
@@ -471,28 +474,29 @@ let Predicates =
 }
 
 // BNERD 64-bit min/max expansion.
-let Predicates =
-    [HasBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
-  let Size = 32 in {
-    def BNEPseudoAtomicLoadMax64 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadMin64 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadUMax64 : PseudoBNEAMOUMinUMax;
-    def BNEPseudoAtomicLoadUMin64 : PseudoBNEAMOUMinUMax;
-  }
+// [HasBNERD, HasStdExtZalrsc, NoStdExtZaamo, IsRV64]
+// let Predicates =
+//     [HasStdExtZalrsc, NoStdExtZaamo, IsRV64] in {
+  // let Size = 32 in {
+  //   def BNEPseudoAtomicLoadMax64 : PseudoBNEAMOUMinUMax;
+  //   def BNEPseudoAtomicLoadMin64 : PseudoBNEAMOUMinUMax;
+  //   def BNEPseudoAtomicLoadUMax64 : PseudoBNEAMOUMinUMax;
+  //   def BNEPseudoAtomicLoadUMin64 : PseudoBNEAMOUMinUMax;
+  // }
 
-  defm : PseudoAMOPat<"atomic_load_max_i64",
-                      BNEPseudoAtomicLoadMax64,
-                      i64>;
-  defm : PseudoAMOPat<"atomic_load_min_i64",
-                      BNEPseudoAtomicLoadMin64,
-                      i64>;
-  defm : PseudoAMOPat<"atomic_load_umax_i64",
-                      BNEPseudoAtomicLoadUMax64,
-                      i64>;
-  defm : PseudoAMOPat<"atomic_load_umin_i64",
-                      BNEPseudoAtomicLoadUMin64,
-                      i64>;
-}
+//   defm : PseudoAMOPat<"atomic_load_max_i64",
+//                       BNEPseudoAtomicLoadMax64,
+//                       i64>;
+//   defm : PseudoAMOPat<"atomic_load_min_i64",
+//                       BNEPseudoAtomicLoadMin64,
+//                       i64>;
+//   defm : PseudoAMOPat<"atomic_load_umax_i64",
+//                       BNEPseudoAtomicLoadUMax64,
+//                       i64>;
+//   defm : PseudoAMOPat<"atomic_load_umin_i64",
+//                       BNEPseudoAtomicLoadUMin64,
+//                       i64>;
+// }
 
 
 //===----------------------------------------------------------------------===//
@@ -534,9 +538,9 @@ let Predicates = [HasStdExtZalrsc] in {
       PseudoMaskedAtomicLoadNand32>;
 }
 
-
+//Predicates = [NoBNERD, HasStdExtZalrsc]
 // Normal masked 32-bit min/max expansion.
-let Predicates = [NoBNERD, HasStdExtZalrsc] in {
+let Predicates = [HasStdExtZalrsc] in {
   let Size = 44 in {
     def PseudoMaskedAtomicLoadMax32 : PseudoMaskedAMOMinMax;
     def PseudoMaskedAtomicLoadMin32 : PseudoMaskedAMOMinMax;
@@ -564,41 +568,41 @@ let Predicates = [NoBNERD, HasStdExtZalrsc] in {
       PseudoMaskedAtomicLoadUMin32>;
 }
 
-
+// Predicates = [HasBNERD, HasStdExtZalrsc]
 // BNERD masked 32-bit min/max expansion.
-let Predicates = [HasBNERD, HasStdExtZalrsc] in {
-  let Size = 52 in {
-    def BNEPseudoMaskedAtomicLoadMax32 :
-        PseudoMaskedBNEAMOMinMax;
+// let Predicates = [HasStdExtZalrsc] in {
+//   let Size = 52 in {
+//     def BNEPseudoMaskedAtomicLoadMax32 :
+//         PseudoMaskedBNEAMOMinMax;
 
-    def BNEPseudoMaskedAtomicLoadMin32 :
-        PseudoMaskedBNEAMOMinMax;
-  }
+//     def BNEPseudoMaskedAtomicLoadMin32 :
+//         PseudoMaskedBNEAMOMinMax;
+//   }
 
-  let Size = 44 in {
-    def BNEPseudoMaskedAtomicLoadUMax32 :
-        PseudoMaskedBNEAMOUMinUMax;
+//   let Size = 44 in {
+//     def BNEPseudoMaskedAtomicLoadUMax32 :
+//         PseudoMaskedBNEAMOUMinUMax;
 
-    def BNEPseudoMaskedAtomicLoadUMin32 :
-        PseudoMaskedBNEAMOUMinUMax;
-  }
+//     def BNEPseudoMaskedAtomicLoadUMin32 :
+//         PseudoMaskedBNEAMOUMinUMax;
+//   }
 
-  def : PseudoMaskedAMOMinMaxPat<
-      int_riscv_masked_atomicrmw_max,
-      BNEPseudoMaskedAtomicLoadMax32>;
+//   def : PseudoMaskedAMOMinMaxPat<
+//       int_riscv_masked_atomicrmw_max,
+//       BNEPseudoMaskedAtomicLoadMax32>;
 
-  def : PseudoMaskedAMOMinMaxPat<
-      int_riscv_masked_atomicrmw_min,
-      BNEPseudoMaskedAtomicLoadMin32>;
+//   def : PseudoMaskedAMOMinMaxPat<
+//       int_riscv_masked_atomicrmw_min,
+//       BNEPseudoMaskedAtomicLoadMin32>;
 
-  def : PseudoMaskedAMOPat<
-      int_riscv_masked_atomicrmw_umax,
-      BNEPseudoMaskedAtomicLoadUMax32>;
+//   def : PseudoMaskedAMOPat<
+//       int_riscv_masked_atomicrmw_umax,
+//       BNEPseudoMaskedAtomicLoadUMax32>;
 
-  def : PseudoMaskedAMOPat<
-      int_riscv_masked_atomicrmw_umin,
-      BNEPseudoMaskedAtomicLoadUMin32>;
-}
+//   def : PseudoMaskedAMOPat<
+//       int_riscv_masked_atomicrmw_umin,
+//       BNEPseudoMaskedAtomicLoadUMin32>;
+// }
 
 let Predicates = [HasStdExtZalrsc, IsRV64] in {
 

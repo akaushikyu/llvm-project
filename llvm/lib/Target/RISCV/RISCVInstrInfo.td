@@ -380,8 +380,8 @@ def bare_simm13_lsb0 : BareSImm13Lsb0MaybeSym,
   let OperandType = "OPERAND_PCREL";
 }
 
-#ifdef BNERD_FEATURE_DISABLED
-#else
+// #ifdef BNERD_FEATURE_DISABLED
+// #else
 class BareSImm8Lsb0 : Operand<OtherVT> {
   let MCOperandPredicate = [{
     int64_t Imm;
@@ -400,7 +400,7 @@ def bare_simm8_lsb0 :  BareSImm8Lsb0,
   let DecoderMethod = "decodeSImmOperandAndLslN<8, 1>";
   let OperandType = "OPERAND_PCREL";
 }
-#endif
+// #endif
 
 // We need this (sort of) duplicate definition since adding ImmLeaf to
 // bare_simm13_lsb0 above makes it not sit well with codegen patterns where it
@@ -665,24 +665,24 @@ class BranchCC_rri<bits<3> funct3, string opcodestr>
   let mayStore = 0;
 }
 
-#ifdef BNERD_FEATURE_DISABLED
-#else
+// #ifdef BNERD_FEATURE_DISABLED
+// #else
 // BNERD: B-type branch with func3=0x3. Bits [30:27|7] of the standard B-type
 // immediate are repurposed as a 5-bit register field (rd). The remaining
 // offset bits [12|6:1] still carry the PC-relative branch target.
-class BranchCC_rrri<bits<3> funct3, string opcodestr>
-    : RVInstBNERD<funct3, OPC_BRANCH, (outs GPR:$rd),
-              (ins GPR:$rs1, GPR:$rs2, bare_simm8_lsb0:$imm7),
-              opcodestr, "$rd, $rs1, $rs2, $imm7">,
-      Sched<[WriteJmp, ReadJmp, ReadJmp]> {
-  bits<5> rd;
-  let isBranch = 1;
-  let isTerminator = 1;
-  let hasSideEffects = 0;
-  let mayLoad = 0;
-  let mayStore = 0;
-}
-#endif
+// class BranchCC_rrri<bits<3> funct3, string opcodestr>
+//     : RVInstBNERD<funct3, OPC_BRANCH, (outs GPR:$rd),
+//               (ins GPR:$rs1, GPR:$rs2, bare_simm8_lsb0:$imm7),
+//               opcodestr, "$rd, $rs1, $rs2, $imm7">,
+//       Sched<[WriteJmp, ReadJmp, ReadJmp]> {
+//   bits<5> rd;
+//   let isBranch = 1;
+//   let isTerminator = 1;
+//   let hasSideEffects = 0;
+//   let mayLoad = 0;
+//   let mayStore = 0;
+// }
+// #endif
 
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in {
 class Load_ri<bits<3> funct3, string opcodestr, DAGOperand rty = GPR>
@@ -810,11 +810,11 @@ def BGE  : BranchCC_rri<0b101, "bge">;
 def BLTU : BranchCC_rri<0b110, "bltu">;
 def BGEU : BranchCC_rri<0b111, "bgeu">;
 
-#ifdef BNERD_FEATURE_DISABLED
-#else
-def BEQRD: BranchCC_rrri<0b010, "beqrd">;
-def BNERD: BranchCC_rrri<0b011, "bnerd">;
-#endif
+// #ifdef BNERD_FEATURE_DISABLED
+// #else
+// def BEQRD: BranchCC_rrri<0b010, "beqrd">;
+// def BNERD: BranchCC_rrri<0b011, "bnerd">;
+// #endif
 
 let IsSignExtendingOpW = 1, canFoldAsLoad = 1, isReMaterializable = 1 in {
 def LB  : Load_ri<0b000, "lb">, Sched<[WriteLDB, ReadMemBase]>;
@@ -1772,24 +1772,24 @@ multiclass BccPat<CondCode Cond, RVInstB Inst> {
             (Inst GPR:$rs1, (XLenVT X0), bare_simm13_lsb0_bb:$imm12)>;
 }
 
-//[BNERD]
-class BNEBranchPseudo
-    : Pseudo<(outs GPR:$scratch1),
-             (ins GPR:$rs1, GPR:$rs2, bare_simm13_lsb0_bb:$target),[]> {
-  let Constraints = "@earlyclobber $scratch1";
-  let isBranch = 1;
-  let isTerminator = 1;
-  let hasSideEffects = 0;
-  let mayLoad = 0;
-  let mayStore = 0;
-  let hasNoSchedulingInfo = 1;
-}
+// //[BNERD]
+// class BNEBranchPseudo
+//     : Pseudo<(outs GPR:$scratch1),
+//              (ins GPR:$rs1, GPR:$rs2, bare_simm13_lsb0_bb:$target),[]> {
+//   let Constraints = "@earlyclobber $scratch1";
+//   let isBranch = 1;
+//   let isTerminator = 1;
+//   let hasSideEffects = 0;
+//   let mayLoad = 0;
+//   let mayStore = 0;
+//   let hasNoSchedulingInfo = 1;
+// }
 // Pseudo opcodes
-def PseudoBEQUsingBNE  : BNEBranchPseudo;
-def PseudoBLTUsingBNE  : BNEBranchPseudo;
-def PseudoBGEUsingBNE  : BNEBranchPseudo;
-def PseudoBLTUUsingBNE : BNEBranchPseudo;
-def PseudoBGEUUsingBNE : BNEBranchPseudo;
+// def PseudoBEQUsingBNE  : BNEBranchPseudo;
+// def PseudoBLTUsingBNE  : BNEBranchPseudo;
+// def PseudoBGEUsingBNE  : BNEBranchPseudo;
+// def PseudoBLTUUsingBNE : BNEBranchPseudo;
+// def PseudoBGEUUsingBNE : BNEBranchPseudo;
 
 class BrccCompressOpt<CondCode Cond, RVInstB Inst>
     : Pat<(riscv_brcc GPR:$lhs, simm12_no6:$Constant, Cond, bb:$place),
@@ -1801,24 +1801,25 @@ class BrccCompressOpt<CondCode Cond, RVInstB Inst>
 defm : BccPat<SETNE, BNE>;
 
 // Normal branches are usable only when the BNERD feature is OFF.
-let Predicates = [NoBNERD] in {
+// let Predicates = [NoBNERD] in
+// let Predicates = [NoBNERD] in {
   defm : BccPat<SETEQ,  BEQ>;
   defm : BccPat<SETLT,  BLT>;
   defm : BccPat<SETGE,  BGE>;
   defm : BccPat<SETULT, BLTU>;
   defm : BccPat<SETUGE, BGEU>;
-}
+// }
 
 // The pseudo patterns are usable only when the BNERD feature is ON.
-let Predicates = [HasBNERD] in {
-  defm : BNEBccPat<SETEQ,  PseudoBEQUsingBNE>;
-  defm : BNEBccPat<SETLT,  PseudoBLTUsingBNE>;
-  defm : BNEBccPat<SETGE,  PseudoBGEUsingBNE>;
-  defm : BNEBccPat<SETULT, PseudoBLTUUsingBNE>;
-  defm : BNEBccPat<SETUGE, PseudoBGEUUsingBNE>;
-}
-
-let Predicates =[HasStdExtZca, OptForMinSize, NoBNERD] in {
+// let Predicates = [HasBNERD] in {
+//   defm : BNEBccPat<SETEQ,  PseudoBEQUsingBNE>;
+//   defm : BNEBccPat<SETLT,  PseudoBLTUsingBNE>;
+//   defm : BNEBccPat<SETGE,  PseudoBGEUsingBNE>;
+//   defm : BNEBccPat<SETULT, PseudoBLTUUsingBNE>;
+//   defm : BNEBccPat<SETUGE, PseudoBGEUUsingBNE>;
+// }
+//Predicates =[HasStdExtZca, OptForMinSize, NoBNERD]
+let Predicates =[HasStdExtZca, OptForMinSize] in {
   def : BrccCompressOpt<SETEQ, BEQ>;
 }
 
@@ -2428,9 +2429,9 @@ include "RISCVInstrInfoZimop.td"
 include "RISCVInstrInfoZicbo.td"
 include "RISCVInstrInfoZicond.td"
 include "RISCVInstrInfoZilsd.td"
-#ifdef BNERD_FEATURE_DISABLED
+// #ifdef BNERD_FEATURE_DISABLED
 include "RISCVInstrInfoZibi.td"
-#endif
+// #endif
 
 // Scalar FP
 include "RISCVInstrInfoF.td"

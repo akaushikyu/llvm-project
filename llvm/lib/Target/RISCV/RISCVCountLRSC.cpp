@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+
 #include "llvm/Support/Debug.h"
 #define RISCV_COUNT_LR_SC_NAME "RISC-V count LR/SC instruction pairs"
 #define DEBUG_TYPE "riscv-lrsc-count"
@@ -22,6 +23,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -76,8 +78,8 @@ private:
   /* Added MachineFunction &MF as a parameter so LR/SC counts can be
    * attributed to the containing function.
    */
-  std::tuple<unsigned, unsigned, unsigned> countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB, const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex);
-  
+  std::tuple<unsigned, unsigned, unsigned> countLRSC(utils::LRSCCounts &Counts,
+                                                    MachineBasicBlock &MBB);
 
   /* Struct defined in LRSCCountUtils.hpp. */
   utils::LRSCCounts Counts;
@@ -103,29 +105,7 @@ RISCVCountLRSC::~RISCVCountLRSC() {
 }
 
 bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
-  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
-  unsigned Index = 0;
-  for (MachineBasicBlock *MBB : RPOT){
-    RPOIndex[MBB] = Index++;
-  }
-  LLVM_DEBUG({
-  dbgs() << "=== RPO ===\n";
-  for (MachineBasicBlock *MBB : RPOT)
-    dbgs() << "MBB" << MBB->getNumber() << "\n";
 
-  dbgs() << "=== DenseMap ===\n";
-  for (const auto &Entry : RPOIndex) {
-    dbgs() << "MBB" << Entry.first->getNumber()
-           << " -> " << Entry.second << "\n";
-  }
-
-  dbgs() << "=== RPO with indices ===\n";
-  for (MachineBasicBlock *MBB : RPOT) {
-    dbgs() << "MBB" << MBB->getNumber()
-           << " -> " << RPOIndex.lookup(MBB) << "\n";
-  }
-});
   // unsigned totalCount = 0;
   Counts.clearAll();
   LLVM_DEBUG(dbgs() << "=== Function: " << MF.getName() << " ===\n");
@@ -168,7 +148,7 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
     Order.push_back(&MBB);
 
     /* Number of LR/SC instructions detected in this basic block. */
-    statPerBBCnt = countLRSC(Counts, MBB, RPOIndex);
+    statPerBBCnt = countLRSC(Counts, MBB);
 
     /* Ensure the MF -> BB entry exists even if this basic block has zero
      * LR/SC instructions.
@@ -210,13 +190,14 @@ bool RISCVCountLRSC::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB, const DenseMap<MachineBasicBlock *, unsigned> &RPOIndex) {
+std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCounts &Counts, MachineBasicBlock &MBB) {
   MachinePostDominatorTree &MPDT = getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineBasicBlock::iterator E = MBB.end();
   MachineBasicBlock *LR_MBB = &MBB;
   MachineBasicBlock *TargetMBB = nullptr;
-
+  MachineFunction *MF = MBB.getParent();
+  const TargetRegisterInfo *TRI =  MF->getSubtarget().getRegisterInfo();
   const TargetInstrInfo *TII = MBB.getParent()->getSubtarget().getInstrInfo();
 
   /* Iterate over each instruction in the basic block, classify its opcode
@@ -239,12 +220,56 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
       case RISCV::LR_W_RL:
       case RISCV::LR_D_AQRL:
       case RISCV::LR_W_AQRL:{
+        Counts.setLRKey(*LR_MBB, lrsc::stringifyOpcode(opc),lrsc::getRegString(*MBBI, *MF));
         SmallPtrSet<MachineBasicBlock *, 32> Visited;
         std::tuple<bool, MachineBasicBlock *, MachineBasicBlock *, MachineBasicBlock *> Result = {false, nullptr, nullptr, nullptr};
         /* Detecting the retry path for LR, and detecting SCMBB, 
          the immediate successor of LR_MBB that reaches SCMBB, 
          and the exit successor of LR_MBB that does not reach SCMBB (retries LR or exits the LR/SC sequence). */
-         
+        //Finding dead regs
+        //-------------------------------------------------
+        MachineBasicBlock::iterator BrI=lrsc::isBranchAfter(*MBBI);
+        LivePhysRegs LiveRegs(*TRI);
+
+        LiveRegs.addLiveOuts(MBB);
+
+        for (auto I = MBB.rbegin(); I != MBB.rend(); ++I) {
+          MachineInstr &MI = *I;
+          if (&MI == MBBI)
+            break;
+          LiveRegs.stepBackward(MI);
+        }
+        static const MCPhysReg GPRs[] = {
+            RISCV::X0,  RISCV::X1,  RISCV::X2,  RISCV::X3,
+            RISCV::X4,  RISCV::X5,  RISCV::X6,  RISCV::X7,
+            RISCV::X8,  RISCV::X9,  RISCV::X10, RISCV::X11,
+            RISCV::X12, RISCV::X13, RISCV::X14, RISCV::X15,
+            RISCV::X16, RISCV::X17, RISCV::X18, RISCV::X19,
+            RISCV::X20, RISCV::X21, RISCV::X22, RISCV::X23,
+            RISCV::X24, RISCV::X25, RISCV::X26, RISCV::X27,
+            RISCV::X28, RISCV::X29, RISCV::X30, RISCV::X31
+        };
+        for (MCPhysReg Reg : GPRs) {
+          if (!LiveRegs.contains(Reg))
+          Counts.addDeadReg(Counts.getLRKey(), TRI->getName(Reg));
+        }
+        LLVM_DEBUG({
+          dbgs() << "Live GPRs: ";
+          for (MCPhysReg Reg : GPRs) {
+            if (LiveRegs.contains(Reg))
+              dbgs() << TRI->getName(Reg) << " ";
+          }
+          dbgs() << "\n";
+
+          dbgs() << "Non-live GPRs: ";
+          for (MCPhysReg Reg : GPRs) {
+            if (!LiveRegs.contains(Reg))
+              dbgs() << TRI->getName(Reg) << " ";
+          }
+          dbgs() << "\n";
+        });
+        //-------------------------------------------------
+      
         lrsc::findSCAndLRRetry(LR_MBB, &MBB, Visited, Result, 15);
         auto [isRetryLR, SCMBB, SCReachSucc, exitSucc] = Result;
         LLVM_DEBUG({
@@ -275,7 +300,7 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
                 << (exitSucc ? "bb." + Twine(exitSucc->getNumber()) : Twine("null"))
                 << "\n";
         });
-        MachineFunction &MF = *MBB.getParent();
+        
         LLVM_DEBUG({
           if (SCMBB)
             dbgs() << "Found SCMBB: bb." << SCMBB->getNumber() << "\n";
@@ -283,11 +308,10 @@ std::tuple<unsigned, unsigned, unsigned> RISCVCountLRSC::countLRSC(utils::LRSCCo
             dbgs() << "SCMBB NOT FOUND\n";
         });
 
-        Counts.setLRKey(*LR_MBB, lrsc::stringifyOpcode(opc),lrsc::getRegString(*MBBI, MF));
-        if (LR_MBB != SCMBB){
-          Counts.setLRBackward(lrsc::isBackwardBranch(LR_MBB, TargetMBB, RPOIndex));
-        }
-        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR, RPOIndex)) {
+        // if (LR_MBB != SCMBB){
+        //   Counts.setLRBackward(lrsc::isBackwardBranch(LR_MBB, TargetMBB));
+        // }
+        if(lrsc::isConditionalLRSC(LR_MBB, SCMBB, TargetMBB, MPDT, isRetryLR)) {
 
           Counts.updateBBLoopSeqFlavCnt(MBB, true);
           

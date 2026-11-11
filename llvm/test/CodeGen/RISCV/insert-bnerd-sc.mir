@@ -1,4 +1,4 @@
-# RUN: llc -mattr=+a,+bnerd -mtriple=riscv64 -run-pass=riscv-insert-bnerd-sc \
+# RUN: llc -mattr=+a -mtriple=riscv64 -run-pass=riscv-insert-dummy-sc \
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s
 --- |
   define void @bne_after_lr(ptr %p) { ret void }
@@ -15,7 +15,7 @@ body:             |
   ; CHECK-LABEL: name: bne_after_lr
   ; CHECK-LABEL: bb.0:
   ; CHECK:        $x5 = LR_W $x10
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x5, $x0, %bb.[[BRIDGE:[0-9]+]]
+  ; CHECK-NEXT:   BNE $x5, $x0, %bb.[[BRIDGE:[0-9]+]]
 
   ; CHECK-LABEL: bb.1:
   ; CHECK:        early-clobber $x6 = SC_W $x5, $x10
@@ -48,7 +48,6 @@ body:             |
   ; CHECK:        LR_W
   ; CHECK-NEXT:   ADDI
   ; CHECK-NEXT:   SC
-  ; CHECK-NOT:    BNERD
   bb.0:
     liveins: $x10
     $x5 = LR_W $x10
@@ -65,10 +64,10 @@ tracksRegLiveness: true
 body:             |
   ; CHECK-LABEL: name: multiple_lrsc_pairs
   ;
-  ; First pair: BNE -> BNERD with its own bridge block.
+  ; First pair:
   ; CHECK-LABEL: bb.0:
   ; CHECK:        $x5 = LR_W $x10
-  ; CHECK-NEXT:   ${{x[0-9]+}} = BNERD $x5, $x0, %bb.[[BRIDGE1:[0-9]+]]
+  ; CHECK-NEXT:   BNE $x5, $x0, %bb.[[BRIDGE1:[0-9]+]]
   ;
   ; CHECK-LABEL: bb.1:
   ; CHECK:        early-clobber $x6 = SC_W $x5, $x10
@@ -76,7 +75,7 @@ body:             |
   ; Second pair (self loop):
   ; CHECK-LABEL: bb.2:
   ; CHECK:        $x7 = LR_W $x11
-  ; CHECK-NEXT:   BNE $x7, $x0, %bb.2
+  ; CHECK-NEXT:   BNE $x7, $x0, %bb.[[BRIDGE2:[0-9]+]]
   ;
   ; CHECK-LABEL: bb.3:
   ; CHECK:        early-clobber $x28 = SC_W $x7, $x11
@@ -90,6 +89,10 @@ body:             |
   ; CHECK:        early-clobber $x28 = SC_W $x9, $x12
   ;
   ; CHECK: bb.[[BRIDGE1]]:
+  ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
+  ; CHECK-NEXT:   PseudoBR %bb.2
+  ;
+  ; CHECK: bb.[[BRIDGE2]]:
   ; CHECK:        $x0 = SC_W ${{x[0-9]+}}, $x0
   ; CHECK-NEXT:   PseudoBR %bb.2
   ;
@@ -126,4 +129,3 @@ body:             |
   bb.6:
     PseudoRET
 ...
-
