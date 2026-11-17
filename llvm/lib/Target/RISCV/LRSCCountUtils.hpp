@@ -1012,7 +1012,6 @@ inline void findSCAndLRRetry(MachineBasicBlock *LRMBB,
                                   continue;
                                 }
                                 if(isLRMBB(*Succ)) {
-                                  Visited.insert(Succ);
                                   continue;
                                 }
                                 if(isSCMBB(*Succ)) {
